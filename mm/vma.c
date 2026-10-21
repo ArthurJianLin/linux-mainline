@@ -32,6 +32,13 @@ struct mmap_state {
 	void *vm_private_data;
 
 	unsigned long charged;
+	/*
+	 * Commit charge of the old accountable mapping(s) that are being
+	 * replaced.  __mmap_setup() transfers it into @charged (accounted)
+	 * and zeroes vms->nr_accounted, so a later failure must return both
+	 * parts; see mmap_region()'s unacct_error label.
+	 */
+	unsigned long old_nr_accounted;
 
 	struct vm_area_struct *prev;
 	struct vm_area_struct *next;
@@ -2585,6 +2592,7 @@ static int __mmap_setup(struct mmap_state *map, struct vm_area_desc *desc,
 				return error;
 		}
 
+		map->old_nr_accounted = vms->nr_accounted;
 		vms->nr_accounted = 0;
 		vma_flags_set(&map->vma_flags, VMA_ACCOUNT_BIT);
 	}
@@ -2925,6 +2933,19 @@ static unsigned long __mmap_region(struct file *file, unsigned long addr,
 unacct_error:
 	if (map.charged)
 		vm_unacct_memory(map.charged);
+	/*
+	 * If the replacement mapping was for a MAP_FIXED operation over an
+	 * existing accountable (VM_ACCOUNT) mapping, __mmap_setup() charged
+	 * only the delta (pglen - old accounting) and transferred the old
+	 * accounting to the new mapping (vms->nr_accounted = 0).  On failure
+	 * the old mapping is unmapped for real (vms_clean_up_area() already
+	 * cleared the PTEs, so vms_abort_munmap_vmas() cannot reattach it and
+	 * vms_complete_munmap_vmas() unaccounts vms->nr_accounted which is now
+	 * zero), so the transferred accounting must be returned here or
+	 * vm_committed_as leaks it permanently.
+	 */
+	if (map.old_nr_accounted)
+		vm_unacct_memory(map.old_nr_accounted);
 abort_munmap:
 	/*
 	 * This indicates that .mmap_prepare has set a new file, differing from
