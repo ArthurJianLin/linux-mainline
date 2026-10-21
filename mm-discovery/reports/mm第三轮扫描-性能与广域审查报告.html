@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mm 子系统第三轮扫描：性能与广域审查报告（Linux 7.3）</title>
+<style>
+/* ========== Reset & Base ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { min-height: 100%; }
+body {
+  position: relative;
+  font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", "Noto Sans SC", sans-serif;
+  color: #1f2d3d;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 40px 24px;
+  background: linear-gradient(160deg, #f8fafc 0%, #ffffff 45%, #cfe0f5 100%);
+  min-height: 100vh;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 45% 35% at 12% 8%, rgba(255,255,255,0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 88% 90%, rgba(255,255,255,0.45) 0%, transparent 55%);
+}
+body > * { position: relative; z-index: 1; }
+
+/* ========== 封面 Hero ========== */
+.title {
+  position: relative;
+  overflow: hidden;
+  padding: 56px 40px;
+  text-align: center;
+  background: linear-gradient(135deg, #1e3a5f 0%, #3b82f6 50%, #4f8ef7 100%);
+  color: #ffffff;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+}
+.title::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 70% 55% at 18% 82%, rgba(255,255,255,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 82% 18%, rgba(255,255,255,0.08) 0%, transparent 55%);
+  pointer-events: none;
+}
+.title > * { position: relative; z-index: 1; }
+.title h1 { font-size: 28px; font-weight: 800; margin: 0 0 14px 0; letter-spacing: 1px; color: #ffffff; }
+.title .accent-line { width: 48px; height: 3px; background: rgba(255,255,255,0.85); margin: 0 auto 18px; border-radius: 2px; }
+.title p { font-size: 15px; color: rgba(255,255,255,0.85); margin: 0; line-height: 1.7; }
+
+/* ========== 章节标题 ========== */
+h1.heading {
+  font-size: 28px;
+  color: #0f1e33;
+  margin: 36px 0 16px 0;
+  font-weight: 700;
+  border-left: 4px solid #3b82f6;
+  padding-left: 16px;
+}
+h2.heading {
+  font-size: 22px;
+  color: #0f1e33;
+  margin: 28px 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #c9d6f3;
+  font-weight: 600;
+}
+h3.heading {
+  font-size: 18px;
+  color: #0f1e33;
+  margin: 20px 0 10px 0;
+  font-weight: 600;
+}
+
+/* ========== 正文 / 列表 ========== */
+.paragraph { font-size: 15px; color: #1f2d3d; line-height: 1.8; margin: 0 0 16px 0; }
+.list { margin: 0 0 16px 0; padding-left: 24px; font-size: 15px; color: #1f2d3d; line-height: 1.8; }
+.list li { margin-bottom: 8px; }
+.list li::marker { color: #3b82f6; }
+
+/* ========== 正文区卡片化容器 ========== */
+.doc-section {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 24px 28px;
+  margin: 0 0 16px 0;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+}
+.doc-section.alt { background: #e6edf6; box-shadow: none; }
+
+/* ========== callout ========== */
+.callout {
+  margin: 0 0 16px 0;
+  padding: 16px 24px;
+  background: #e8f0fe;
+  border-left: 4px solid #3b82f6;
+  border-radius: 8px;
+}
+.callout[data-variant="warning"] { background: #FFF3E0; border-left-color: #d97706; }
+.callout[data-variant="quote"]   { background: #f0fdfa; border-left-color: #14b8a6; }
+.callout p { font-size: 15px; color: #1f2d3d; margin: 0; line-height: 1.8; }
+
+/* ========== 表格 ========== */
+.table-wrap {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+  overflow: hidden;
+  margin: 0 0 16px 0;
+}
+.table-caption {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #c9d6f3, #e8f0fe);
+  color: #0f1e33;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  border-bottom: 1px solid #dbe4ef;
+}
+table.table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
+table.table thead th {
+  padding: 12px 16px;
+  text-align: left;
+  background: #c9d6f3;
+  color: #0f1e33;
+  font-weight: 700;
+  border-bottom: 2px solid #dbe4ef;
+  word-break: break-word;
+}
+table.table tbody td { padding: 12px 16px; border-bottom: 1px solid #dbe4ef; color: #1f2d3d; word-break: break-word; }
+table.table tbody tr:last-child td { border-bottom: none; }
+table.table tbody tr:hover { background: #e8f0fe; }
+table.table code, .doc-section code, .callout code {
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-size: 13px;
+  background: #eef5ff;
+  color: #0a1626;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* ========== stat ========== */
+.stat-grid { display: flex; gap: 16px; margin: 0 0 16px 0; }
+.stat {
+  flex: 1;
+  text-align: center;
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  border-top: 3px solid #3b82f6;
+}
+.stat .num { font-size: 28px; color: #3b82f6; font-weight: 800; line-height: 1.1; }
+.stat .label { font-size: 12px; color: #5b6b80; margin-top: 6px; }
+
+/* ========== 优先级胶囊 ========== */
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.badge.p1 { background: #FCE4EC; color: #C62828; }
+.badge.p2 { background: #FFF3E0; color: #E65100; }
+.badge.p3 { background: #E3F2FD; color: #1565C0; }
+.badge.ok { background: #E8F5E9; color: #2E7D32; }
+.badge.dead { background: #eceff1; color: #607d8b; }
+.badge.skip { background: #eceff1; color: #607d8b; }
+
+/* ========== code ========== */
+.code {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 16px 24px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+  margin: 0 0 16px 0;
+  font-family: 'Cascadia Code', 'Fira Code', 'SF Mono', 'Source Code Pro', Consolas, monospace;
+  white-space: pre;
+}
+
+/* ========== cite / source-list ========== */
+.cite {
+  font-size: 11px;
+  color: #3b82f6;
+  font-weight: 600;
+  vertical-align: super;
+  margin-left: 2px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.cite:hover { color: #0f1e33; text-decoration: underline; }
+.source-list { margin: 0 0 16px 0; }
+.source-list ol { padding-left: 20px; font-size: 13px; color: #5b6b80; line-height: 2.0; }
+.source-list ol li { margin-bottom: 6px; }
+.source-list ol li strong { color: #0f1e33; }
+.source-list .src-id { display: inline-block; width: 24px; font-weight: 700; color: #3b82f6; }
+
+/* ========== divider ========== */
+.divider { margin: 32px 0; text-align: center; user-select: none; }
+.divider .line { display: inline-block; width: 36px; height: 1px; vertical-align: middle; background: linear-gradient(to right, transparent, #e8f0fe); }
+.divider .line:last-child { background: linear-gradient(to left, transparent, #e8f0fe); }
+.divider .diamond { display: inline-block; width: 8px; height: 8px; margin: 0 12px; vertical-align: middle; transform: rotate(45deg); background: #3b82f6; border-radius: 1px; box-shadow: 0 0 0 2px #f4f7fb; }
+
+/* ========== 尾页 ========== */
+.end_page {
+  margin-top: 24px;
+  padding: 56px 24px;
+  text-align: center;
+  background: linear-gradient(135deg, #c9d6f3 0%, #e8f0fe 100%);
+  border-radius: 16px;
+}
+.end_page h1 { font-size: 28px; color: #0f1e33; margin: 0 0 16px 0; font-weight: 800; }
+.end_page p  { font-size: 15px; color: #5b6b80; margin: 0; line-height: 1.8; }
+
+/* ========== 响应式 ========== */
+@media screen and (max-width: 600px) {
+  body { padding: 16px !important; }
+  h1 { font-size: 22px !important; }
+  h2 { font-size: 18px !important; }
+  h3 { font-size: 16px !important; }
+  .stat-grid { flex-direction: column; }
+}
+
+/* ========== 打印优化 ========== */
+@media print {
+  body { padding: 0 !important; margin: 0 !important; background: #f4f7fb; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body::before { display: none; }
+  .title, .end_page { border-radius: 0; box-shadow: none; }
+  .doc-section, .stat, .table-wrap { box-shadow: none; border: 1px solid #dbe4ef; }
+  section { break-inside: auto !important; }
+}
+</style>
+</head>
+<body class="mode-doc" data-palette="ink-blue">
+
+  <!-- ===== 封面 ===== -->
+  <section class="title">
+    <h1>mm 子系统第三轮扫描：性能与广域审查</h1>
+    <div class="accent-line"></div>
+    <p>第三轮：不局限于泄漏，性能优化机会 + 广域正确性补扫<br>
+    对象：/home/ctyun/桌面/linux-mainline（Linux 7.3 正式版 · torvalds c03c1a14 · aarch64）<br>
+    衔接前两轮避坑库（15 条证伪），新增判重复核与 7.4 窗口跟踪情报</p>
+  </section>
+
+  <!-- ===== 概览 ===== -->
+  <h1 class="heading">一、扫描概览</h1>
+  <div class="stat-grid">
+    <div class="stat"><div class="num">5+2</div><div class="label">审查热路径与补扫区</div></div>
+    <div class="stat"><div class="num">4</div><div class="label">性能观察项（含 2 条作者自留 TODO）</div></div>
+    <div class="stat"><div class="num">2</div><div class="label">第一轮候选 mm-unstable 判重复核</div></div>
+    <div class="stat"><div class="num">1</div><div class="label">新增证伪记录</div></div>
+  </div>
+  <div class="doc-section">
+    <p class="paragraph">本轮与前两轮错开角度：第一轮扫静态质量（cleanup/doc），第二轮扫逻辑缺陷（记账/边界/错误路径），<strong>第三轮主攻性能优化机会 + 上轮未覆盖区域的正确性补扫</strong>，并将所有结论置于"前两轮 15 条证伪清单"约束之下，避免重复踩坑。方法论上的三路侦察：</p>
+    <ul class="list">
+      <li><strong>7.4 窗口情报线</strong>：GitCode 实时镜像 ls-remote 验证（master SHA = torvalds c03c1a14 = 7.3），确认 <strong>10-16 以来 mm/ 目录零非 merge 提交</strong>——合并窗口刚开、mm 提交尚未涌入，新代码审查线暂时空窗；</li>
+      <li><strong>性能模式审查线</strong>：性能 TODO/FIXME 尾迹 grep（命中 1 条作者自留 TODO）、批量接口覆盖盲区、循环内冗余计算、新批量 API（mTHP/contpte/folio_batch）的采用度；</li>
+      <li><strong>判重与复核线</strong>：第一轮 8 个候选在 7.3 正式版的存活复核（当时基于 rc4），以及最高优先候选 P1/P2 的 mm-unstable 一个月后撞车复查（cgit 提交搜索 + plain 文件对照）。</li>
+    </ul>
+  </div>
+
+  <!-- ===== 性能审查结论 ===== -->
+  <h1 class="heading">二、性能审查：五大热路径的社区优化覆盖度</h1>
+  <div class="doc-section">
+    <p class="paragraph">逐条精读 7.3 的 mm 核心热路径后，总体判断是：<strong>社区在 6.8 → 7.3 期间的连续批量化系列已经把"低争议、机制明确"的性能空间基本清零</strong>。这正是第二轮报告结论的镜像——新代码的逻辑已被 syzbot 冲刷干净，老热路径的 perf 也被迭代干净。逐路径审查结果：</p>
+  </div>
+  <div class="table-wrap">
+    <div class="table-caption">五大热路径审查结果（Linux 7.3 实测代码）</div>
+    <table class="table" data-caption="五大热路径审查结果">
+      <colgroup>
+        <col style="width:19%">
+        <col style="width:30%">
+        <col style="width:28%">
+        <col style="width:23%">
+      </colgroup>
+      <thead>
+        <tr><th>热路径</th><th>社区已做的批量化</th><th>本轮审查发现</th><th>结论</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>zap 堆栈</strong><br><code>mm/memory.c</code></td>
+          <td><code>do_zap_pte_range()</code> 批处理 + rss 向量 + lazy_mmu + pte 表回收（PT_RECLAIM）</td>
+          <td>连续 none pte 跳过循环逐项 <code>ptep_get()</code>，开销微小；主循环结构已无剩余空间</td>
+          <td><span class="badge ok">已优化到位</span></td>
+        </tr>
+        <tr>
+          <td><strong>匿名缺页</strong><br><code>do_anonymous_page()</code></td>
+          <td>mTHP：大 folio 分配 + <code>pte_range_none()</code> 批量前置检查 + <code>map_anon_folio_pte_pf()</code> 一次完成映射与 rss 记账</td>
+          <td>zeropage 读 fault 路径仍单页 set（无批量语义可挖）；无循环内不变量问题</td>
+          <td><span class="badge ok">已优化到位</span></td>
+        </tr>
+        <tr>
+          <td><strong>swap-in</strong><br><code>mm/swap_state.c</code></td>
+          <td>7.2/7.3 大重构：swap_io_ctx + 大 folio swap-in + order 逐级降级 + <code>folio_batch</code> 收集</td>
+          <td><code>__swap_cache_alloc()</code> 批 swapin 时每 folio 一次 cluster lock/unlock 序列——可合并，但作者（Kairui/Huang Ying 系列）正在活跃迭代，撞车风险高</td>
+          <td><span class="badge p2">观察项 O-1</span></td>
+        </tr>
+        <tr>
+          <td><strong>pcp 批量 free</strong><br><code>free_unref_folios()</code></td>
+          <td>两段式：prepare 循环 + zone 感知的批量释放，跨 zone 才换锁，trylock 回退直接 buddy</td>
+          <td>zone 切换处理正确无冗余；无性能缺口</td>
+          <td><span class="badge ok">已优化到位</span></td>
+        </tr>
+        <tr>
+          <td><strong>weighted interleave</strong><br><code>weighted_interleave_nid()</code></td>
+          <td>task 侧推进状态（il_prev/il_weight）已 O(1)；<code>read_once_policy_nodemask()</code> 双屏障快照</td>
+          <td>ilx 路径每次页缓存分配 <code>for_each_node_mask</code> 重算总权重（2219 行），但详见第五节证伪——收益太小不构成可提交项</td>
+          <td><span class="badge skip">证伪，见五</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== 性能观察项 ===== -->
+  <h1 class="heading">三、性能观察项清单（跟踪但不建议立即提交）</h1>
+  <div class="doc-section">
+    <p class="paragraph">以下四个观察项机制都真实存在，但<strong>均不建议本轮提交</strong>——三条卡在"作者活跃迭代的新框架"（撞车风险），一条卡在"收益太小"（审阅人要求 benchmark 数据时无法自证）。它们的价值在于<strong>持续跟踪上游进展</strong>，在框架沉淀后跟进：</p>
+    <h3 class="heading">O-1 · memcontrol.c:3661 — slabobj_ext 记账批量化 <span class="badge p2">作者自留 TODO</span></h3>
+    <p class="paragraph"><code>__memcg_slab_alloc_hook()</code> 的批量分配路径中，每个对象独立走一遍 stock 消费/回填序列。作者注释明写：<code>TODO: we could batch this until slab_pgdat(slab) changes between iterations, with a more complicated undo</code>。slabobj_ext 是 7.x 新框架、作者活跃迭代中——<strong>撞车风险最高的观察项，建议只跟踪不抢跑</strong>。</p>
+    <h3 class="heading">O-2 · swap_state.c — 批 swapin 的 cluster lock 合并 <span class="badge p2">新框架活跃期</span></h3>
+    <p class="paragraph"><code>__swap_cache_alloc()</code> 中每个 folio 独立完成 cluster lock → add → unlock + memcg charge + 统计 + LRU add 序列（449-493 行）。同 cluster 批 swapin 场景可一次锁内完成多个 add。但该区域 7.2/7.3 刚被 swap_io_ctx 系列重构，作者正在快速跟进版本（如 Kairui 的 mTHP swap-in 系列），同样建议跟踪。</p>
+    <h3 class="heading">O-3 · memfd_luo.c:188 — KHO preserve 的 folio 清零优化 <span class="badge p2">作者标注</span></h3>
+    <p class="paragraph">KHO（Kexec HandOver，7.3 新特性）的 <code>memfd_luo_preserve_folios()</code> 中，非 uptodate 的 fallocate 空洞页被逐个 <code>folio_zero_range()</code>。作者注释明写 <code>NOTE: For someone looking to improve preserve performance, this is a good place to look</code>——是一份公开的性能改进邀请，但 liveupdate 属一次性操作，收益场景限于高频热迁移。</p>
+    <h3 class="heading">O-4 · mempolicy.c — weighted interleave 总权重缓存 <span class="badge skip">本轮证伪</span></h3>
+    <p class="paragraph">见第五节证伪记录：曾作为候选深挖，最终因 nodemask 依赖与典型节点数过小而放弃。</p>
+  </div>
+
+  <!-- ===== 正确性补扫 ===== -->
+  <h1 class="heading">四、正确性补扫：KHO memfd_luo 资源对称性</h1>
+  <div class="doc-section">
+    <p class="paragraph">第一轮只人工核过 <code>memfd_luo.c</code> 的 retrieve 路径引用计数（当时证伪），本轮补扫了 preserve/unpreserve 全链路：</p>
+    <ul class="list">
+      <li><strong>preserve_folios 错误回滚链</strong>：<code>err_unpreserve → err_unpin → err_free_folios</code> 三级标签的回滚对象精确对应（<code>kho_unpreserve_folio()</code> 只回滚已 preserve 的 folios 0..i-1；<code>kho_preserve_vmalloc()</code> 失败时 i==nr_folios 走全量回滚，数学正确）；</li>
+      <li><strong>unpreserve_folios 对称性</strong>：逐 pfolio <code>kho_unpreserve_folio + unpin_folio</code>，与 preserve 的 pin + preserve 逐项配对；pfn==0 跳过分支对应 preserve 时的零尺寸文件捷径；</li>
+      <li><strong>pin 引用计数</strong>：<code>memfd_pin_folios()</code> 返回 nr_pinned 与 <code>unpin_folios(folios, nr_folios)</code> 精确对称，vfree(folios_ser) 对应 vcalloc。</li>
+    </ul>
+    <p class="paragraph">结论：<strong>KHO memfd_luo 的资源对称性干净</strong>，7.3 新文件的错误路径没有发现可提交缺陷。</p>
+  </div>
+
+  <!-- ===== 证伪记录 ===== -->
+  <h1 class="heading">五、第三轮新增证伪记录（避坑库 #16）</h1>
+  <div class="table-wrap">
+    <div class="table-caption">看似优化机会、实为不构成 patch 的候选（完整推理闭环）</div>
+    <table class="table" data-caption="第三轮证伪记录">
+      <colgroup>
+        <col style="width:40%">
+        <col style="width:60%">
+      </colgroup>
+      <thead>
+        <tr><th>候选</th><th>证伪依据</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>weighted_interleave_nid()</code> 缓存 total weight 到 <code>wi_state</code>（省去每页缓存分配的 O(nn_nodes) 求和循环）</td>
+          <td>双重否决：① <strong>nodemask 依赖</strong>——总权重是 (mempolicy.nodes, iw_table) 的函数，每个 VMA/task 的 mask 可不同，无法在全局 state 缓存；只能做 nodes_equal(N_MEMORY) 快路径，覆盖率不完整；② <strong>收益太小</strong>——典型 CXL 部署 nn=2（1 DRAM + 1 CXL），求和仅 2 次加法，主要开销 <code>ilx % weight_total</code> 的除法反而无法省。审阅人索要 benchmark 数据时无法自证显著收益</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== 判重复核 ===== -->
+  <h1 class="heading">六、第一轮候选 7.3 存活复核 + mm-unstable 撞车复查 <span class="badge dead">复核后归档</span></h1>
+  <div class="doc-section">
+    <p class="paragraph">第一轮 8 个候选基于 v7.3-rc4，本轮在 <strong>7.3 正式版</strong>（c03c1a14）逐条复核，并对两个最高优先候选做了 mm-unstable（akpm 补丁队列，比 torvalds 更新）的撞车复查：</p>
+    <ul class="list">
+      <li><strong>P1</strong>（<code>mm/page_alloc.c:5464</code> 无效 <code>EXPORT_SYMBOL(__alloc_frozen_pages_noprof)</code>）：7.3 原样存在 ✓；mm-unstable 上 cgit 提交搜索 "frozen_pages" 共 86 条提交<a class="cite" href="#source-1">[1]</a>，<strong>无任何删除该导出的清理提交</strong>（最接近的 <code>export free_frozen_pages() instead of free_unref_page()</code> 是另一处导出调整）——<strong>未撞车</strong>；</li>
+      <li><strong>P2</strong>（<code>include/linux/pgtable.h:660</code> <code>clear_young_dirty_ptes()</code> 文档参数名 <code>@mm</code> 应为 <code>@vma</code>）：7.3 原样存在 ✓；mm-unstable 的 pgtable.h 文件实拉对照（20KB，git.kernel.org plain 通道）<strong><code>@mm</code> 原样保留——未撞车</strong><a class="cite" href="#source-2">[2]</a>；</li>
+      <li><strong>P3</strong>（<code>mm/mremap.c</code> <code>vrm_stat_account()</code> 过时注释）、<strong>P4</strong>（<code>mm/shmem.c:5328/5332</code> 死宏）、<strong>P5-P8</strong>（kernel-doc 四件套）：7.3 正式版全部原样存活 ✓（与 rc4 同源，无需重复判重结论）。</li>
+    </ul>
+    <div class="callout" data-variant="warning">
+      <p><strong>归档决定（质量优先原则）</strong>：第一轮 8 个候选全部属于 cleanup/doc 类小修小改——无功能影响、无运行时收益，逐个提交只会累积数量而非贡献质量。虽然事实层面它们全部存活且未撞车，<strong>按本轮决策全部归档为低价值，不再作为行动项</strong>。当前阶段只投入两类 patch：真实逻辑修复（如 mremap Committed_AS 泄漏）与带 benchmark 数据支撑的实质性能优化。</p>
+    </div>
+  </div>
+
+  <!-- ===== 窗口情报 ===== -->
+  <h1 class="heading">七、7.4 窗口情报与复扫计划</h1>
+  <div class="doc-section">
+    <p class="paragraph">本轮侦察确认两个事实：<strong>GitCode 镜像与 torvalds 完全同步</strong>（ls-remote master = c03c1a14 = 7.3），且 <strong>10-16 以来主线 mm/ 目录零非 merge 提交</strong><a class="cite" href="#source-3">[3]</a>——7.3 于 10-18 发布后合并窗口尚未开始进 mm 代码。</p>
+    <ol class="list">
+      <li><strong>下一个高产矿脉是 7.4 窗口的新系列</strong>：按主线节奏，mm pull 将在未来 1-3 周集中涌入（第二批通常是 vrm 状态机、mTHP、swap 等活跃方向的续作）；</li>
+      <li><strong>复扫时机</strong>：建议 11 月上旬（窗口提交高峰后）用第二轮方法论（新提交逐个逻辑审查 + 错误路径资源对称）对新涌入代码做第四轮扫描——新代码在 syzbot 冲刷前的 2-3 周窗口是逻辑 bug 密度最高的时段；</li>
+      <li><strong>技术前置</strong>：届时用 <code>git fetch --shallow-since</code> 从 GitCode 拉增量即可（本轮验证独立浅克隆路线可行；注意勿在基准仓直接 fetch——孤儿基准与上游无共同历史，用独立目录避免对象库污染）。</li>
+    </ol>
+  </div>
+
+  <!-- ===== 行动建议 ===== -->
+  <h1 class="heading">八、行动优先级（质量优先原则）</h1>
+  <div class="doc-section">
+    <p class="paragraph">按本轮确立的原则：<strong>当前阶段只追求有质量的 patch——真实逻辑修复与带数据支撑的实质性能优化，不追求数量</strong>。第一轮 P1-P8（cleanup/doc 类）已全部归档，不再列入行动项；未来各轮扫描发现的 cleanup/doc 类候选也一律直接归档，不进入报告行动区。</p>
+    <div class="callout" data-variant="warning">
+      <p><strong>⚠ 行动项 1 状态更新（2026-10-20 联网复核）：mremap Committed_AS 修复撞车</strong>——上游 Lorenzo Stoakes (ARM) 于 <strong>10-19</strong> 独立发现同一泄漏并提交修复（lore: <code>20261019-other-mremap-charge-leak-v1</code>），已进 mm-unstable（commit <code>b78ed86d8</code>，Cc stable）。修法与我们的 patch 语义等价、条件一字不差。修复 patch 作废；<strong>上游系列未附 selftest，我们的 0002 回归测试仍有独立提交价值</strong>（待重写 commit message 后可发）。所幸系列未发出，零损失；同时验证了本地挖掘能力与上游权威维护者同频。</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <div class="table-caption">当前行动项（2026-10-20 联网复核后更新）</div>
+    <table class="table" data-caption="行动优先级">
+      <colgroup>
+        <col style="width:8%">
+        <col style="width:52%">
+        <col style="width:20%">
+        <col style="width:20%">
+      </colgroup>
+      <thead>
+        <tr><th>序</th><th>行动项</th><th>状态</th><th>建议动作</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>mremap Committed_AS 泄漏 selftest（上游修复无配套测试，待重写 commit message）</td><td><span class="badge p2">待决策</span></td><td>重写 message 后可独立提交</td></tr>
+        <tr><td>2</td><td>第四轮扫描：mm-unstable 的 7.4 窗口 patch 流（约 200 条提交，无需等 torvalds）</td><td><span class="badge p1">立即可做</span></td><td>重构系列 + 新 bug fix 逐个审查</td></tr>
+        <tr><td>3</td><td>性能观察项 O-1/O-2/O-3 持续跟踪（均为作者活跃迭代的新框架）</td><td><span class="badge dead">不建议抢跑</span></td><td>框架沉淀后评估跟进窗口</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="doc-section alt">
+    <p class="paragraph"><strong>第四轮靶子清单（从 mm-unstable 200 条提交中筛出）</strong>：</p>
+    <ul class="list">
+      <li><strong>VMA_SPECIAL_FLAGS 消除大系列</strong>（约 40 条：mmap_prepare 回调改造、<code>vma_is_mm_backed()</code> 调词化、VM_IO/VM_MIXEDMAP 语义重梳理、ioremap 普通 RAM 禁止）——Lorenzo 的 7.4 巨型重构，涉及 ALSA/fbdev/scsi/usb/InfiniBand 多驱动交互，重构系列的高 bug 密度窗口；</li>
+      <li><strong>khugepaged/collapse 重构系列</strong>（扫描与折叠拆分、wrapper 消除、policy 状态化）；</li>
+      <li><strong>mm/sparse 重构系列</strong>（约 15 条）；</li>
+      <li><strong>新鲜 bug fix 的修法复审</strong>：truncate 跨页大 folio 数据丢失修复、swap_cache_get_folio 竞态修复、UFFDIO_MOVE 大 folio livelock 修复、page_alloc guard page 合并记账、/proc/maps 2^63 边界丢失——刚修的 bug 最容易留边角遗漏；</li>
+      <li><strong>同域撞车风险提示</strong>：mm-unstable 显示 Lorenzo 的 mremap 系列正在活跃展开（10-19 一批多篇），mremap 领域后续提交需与他的系列保持距离。</li>
+    </ul>
+  </div>
+
+  <div class="divider"><span class="line"></span><span class="diamond"></span><span class="line"></span></div>
+
+  <!-- ===== 尾页 ===== -->
+  <section class="title end_page">
+    <h1>撞车确认 · 第四轮矿脉已到</h1>
+    <p>mremap 修复上游抢先（Lorenzo 10-19，修法一字不差）· selftest 仍有独立价值 · mm-unstable 的 7.4 patch 流约 200 条待审<br>
+    避坑库累计 16 条证伪 + 8 条归档 + 1 条撞车 · 如需启动第四轮或重写 selftest patch，随时告诉我</p>
+  </section>
+
+  <!-- ===== 数据来源 ===== -->
+  <h1 class="heading">数据来源</h1>
+  <div class="source-list">
+    <ol class="list">
+      <li id="source-1"><span class="src-id">[1]</span> <strong>akpm/mm.git mm-unstable 分支 cgit 提交搜索</strong>，git.kernel.org（q=frozen_pages，86 条提交逐条人工核对，2026-10-20 拉取）</li>
+      <li id="source-2"><span class="src-id">[2]</span> <strong>akpm/mm.git mm-unstable 分支 include/linux/pgtable.h plain 文件</strong>，git.kernel.org（2026-10-20 拉取，20078 字节）</li>
+      <li id="source-3"><span class="src-id">[3]</span> <strong>GitCode gh_mirrors/li/linux master</strong>（ls-remote 实测 HEAD = c03c1a14 = torvalds 7.3）与 10-16 以来 mm/ 提交枚举（独立浅克隆 --shallow-since，101717 对象）</li>
+    </ol>
+  </div>
+
+</body>
+</html>

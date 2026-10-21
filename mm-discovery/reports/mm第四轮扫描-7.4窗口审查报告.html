@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mm 子系统第四轮扫描报告</title>
+<style>
+/* ========== Reset & Base ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { min-height: 100%; }
+body {
+  position: relative;
+  font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", "Noto Sans SC", sans-serif;
+  color: #1f2d3d;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 40px 24px;
+  background: linear-gradient(160deg, #f8fafc 0%, #ffffff 45%, #cfe0f5 100%);
+  min-height: 100vh;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 45% 35% at 12% 8%, rgba(255,255,255,0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 88% 90%, rgba(255,255,255,0.45) 0%, transparent 55%);
+}
+body > * { position: relative; z-index: 1; }
+
+/* ========== 封面 Hero ========== */
+.title {
+  position: relative;
+  overflow: hidden;
+  padding: 56px 40px;
+  text-align: center;
+  background: linear-gradient(135deg, #1e3a5f 0%, #3b82f6 50%, #4f8ef7 100%);
+  color: #ffffff;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+}
+.title::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 70% 55% at 18% 82%, rgba(255,255,255,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 82% 18%, rgba(255,255,255,0.08) 0%, transparent 55%);
+  pointer-events: none;
+}
+.title > * { position: relative; z-index: 1; }
+.title h1 { font-size: 28px; font-weight: 800; margin: 0 0 14px 0; letter-spacing: 1px; color: #ffffff; }
+.title .accent-line { width: 48px; height: 3px; background: rgba(255,255,255,0.85); margin: 0 auto 18px; border-radius: 2px; }
+.title p { font-size: 15px; color: rgba(255,255,255,0.85); margin: 0; line-height: 1.7; }
+
+/* ========== 章节标题 ========== */
+h1.heading { font-size: 26px; color: #0f1e33; margin: 36px 0 16px 0; font-weight: 700; border-left: 4px solid #3b82f6; padding-left: 16px; }
+h2.heading { font-size: 21px; color: #0f1e33; margin: 28px 0 12px 0; padding-bottom: 8px; border-bottom: 2px solid #c9d6f3; font-weight: 600; }
+h3.heading { font-size: 17px; color: #1e3a5f; margin: 20px 0 10px 0; font-weight: 600; }
+
+/* ========== 正文 / 列表 ========== */
+.paragraph { font-size: 15px; color: #1f2d3d; line-height: 1.8; margin: 0 0 14px 0; text-indent: 2em; }
+.paragraph.noindent { text-indent: 0; }
+.list { margin: 0 0 14px 0; padding-left: 24px; font-size: 15px; color: #1f2d3d; line-height: 1.8; }
+.list li { margin-bottom: 8px; }
+.list li::marker { color: #3b82f6; }
+
+/* ========== 卡片容器 ========== */
+.doc-section { background: #ffffff; border-radius: 14px; padding: 24px 28px; margin: 0 0 16px 0; box-shadow: 0 2px 12px rgba(0,0,0,0.05); }
+.doc-section.alt { background: #e6edf6; box-shadow: none; }
+
+/* ========== callout ========== */
+.callout { margin: 0 0 14px 0; padding: 16px 24px; background: #e8f0fe; border-left: 4px solid #3b82f6; border-radius: 8px; }
+.callout[data-variant="warning"] { background: #FFF3E0; border-left-color: #d97706; }
+.callout[data-variant="quote"]   { background: #f0fdfa; border-left-color: #14b8a6; }
+.callout p { font-size: 15px; color: #1f2d3d; margin: 0; line-height: 1.8; text-indent: 0; }
+
+/* ========== 表格 ========== */
+.table-wrap { background: #ffffff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); overflow: hidden; margin: 0 0 16px 0; }
+.table-caption { padding: 12px 16px; background: linear-gradient(135deg, #c9d6f3, #e8f0fe); color: #0f1e33; font-size: 14px; font-weight: 600; text-align: center; border-bottom: 1px solid #dbe4ef; }
+table.table { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
+table.table thead th { padding: 10px 12px; text-align: left; background: #c9d6f3; color: #0f1e33; font-weight: 700; border-bottom: 2px solid #dbe4ef; word-break: break-word; }
+table.table tbody td { padding: 10px 12px; border-bottom: 1px solid #dbe4ef; color: #1f2d3d; word-break: break-word; line-height: 1.6; }
+table.table tbody tr:last-child td { border-bottom: none; }
+table.table tbody tr:hover { background: #e8f0fe; }
+.ok { color: #16a34a; font-weight: 700; }
+.warn { color: #d97706; font-weight: 700; }
+.bad { color: #C62828; font-weight: 700; }
+
+/* ========== code ========== */
+.code {
+  background: #1e293b; color: #e2e8f0;
+  padding: 16px 24px; border-radius: 8px; font-size: 13.5px; line-height: 1.6;
+  overflow-x: auto; margin: 0 0 16px 0;
+  font-family: 'Cascadia Code', 'Fira Code', 'SF Mono', 'Source Code Pro', Consolas, monospace;
+}
+
+/* ========== stat ========== */
+.stat-grid { display: flex; gap: 16px; margin: 0 0 16px 0; }
+.stat { flex: 1; text-align: center; padding: 20px 12px; background: #ffffff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-top: 3px solid #3b82f6; }
+.stat .num { font-size: 26px; color: #3b82f6; font-weight: 800; line-height: 1.1; }
+.stat .label { font-size: 12px; color: #5b6b80; margin-top: 6px; }
+
+/* ========== timeline ========== */
+.timeline { list-style: none; padding: 0; margin: 0 0 16px 0; }
+.timeline li { position: relative; padding-left: 28px; padding-bottom: 16px; border-left: 2px solid #e8f0fe; margin-left: 6px; }
+.timeline li:last-child { border-left-color: transparent; padding-bottom: 0; }
+.timeline li::before { content: ''; position: absolute; left: -7px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: #3b82f6; border: 2px solid #f4f7fb; box-shadow: 0 0 0 2px #e8f0fe; }
+.timeline strong { font-size: 14px; color: #2563eb; }
+.timeline p { font-size: 14.5px; color: #1f2d3d; margin: 4px 0 0 0; line-height: 1.75; }
+
+/* ========== divider ========== */
+.divider { margin: 32px 0; text-align: center; user-select: none; }
+.divider .line { display: inline-block; width: 36px; height: 1px; vertical-align: middle; background: linear-gradient(to right, transparent, #e8f0fe); }
+.divider .line:last-child { background: linear-gradient(to left, transparent, #e8f0fe); }
+.divider .diamond { display: inline-block; width: 8px; height: 8px; margin: 0 12px; vertical-align: middle; transform: rotate(45deg); background: #3b82f6; border-radius: 1px; box-shadow: 0 0 0 2px #f4f7fb; }
+
+/* ========== 尾页 ========== */
+.end_page { margin-top: 24px; padding: 56px 24px; text-align: center; background: linear-gradient(135deg, #c9d6f3 0%, #e8f0fe 100%); border-radius: 16px; }
+.end_page h1 { font-size: 26px; color: #0f1e33; margin: 0 0 16px 0; font-weight: 800; }
+.end_page p  { font-size: 15px; color: #5b6b80; margin: 0; line-height: 1.8; }
+
+/* ========== 响应式 ========== */
+@media screen and (max-width: 600px) {
+  body { padding: 16px !important; }
+  h1 { font-size: 22px !important; }
+  h2 { font-size: 18px !important; }
+  h3 { font-size: 16px !important; }
+  .stat-grid { flex-direction: column; }
+}
+@media print {
+  body { padding: 0 !important; margin: 0 !important; background: #f4f7fb; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body::before { display: none; }
+  .title, .end_page { border-radius: 0; box-shadow: none; }
+  .doc-section, .stat, .table-wrap { box-shadow: none; border: 1px solid #dbe4ef; }
+  section { break-inside: auto !important; }
+}
+</style>
+</head>
+<body class="mode-doc" data-palette="ink-blue">
+
+  <!-- ===== 封面 ===== -->
+  <section class="title">
+    <h1>mm 子系统第四轮扫描报告</h1>
+    <div class="accent-line"></div>
+    <p>7.4 合并窗口 mm-unstable 矿脉 · VMA 标志语义重构系列差分审查 · 修复复审<br>基准树 Linux 7.3 (torvalds) · 2026 年 10 月 20 日</p>
+  </section>
+
+  <!-- ===== 执行摘要 ===== -->
+  <h1 class="heading">执行摘要</h1>
+  <div class="doc-section">
+    <p class="paragraph noindent">第三轮末尾我们的 mremap Committed_AS 泄漏修复被 Lorenzo Stoakes 抢发撞车后，第四轮按既定方法论转向 <strong>akpm/mm.git（mm-unstable）7.4 窗口的约 200 条新提交</strong>：以 Lorenzo 的「VMA 标志语义显式化、消除 VM_SPECIAL」39-patch 重构系列为主线做<strong>逐调用点拒绝集差分</strong>，同时对 9 个新鲜 bug fix 做修复复审。本轮结论：</p>
+    <ul class="list">
+      <li><strong>系列差分审查（26/39 成员到手审查）：全部「声称 NFC」经差分验证属实，未发现实质缺陷。</strong>核心谓词链 mm_managed → fixed_mapping → mm_backed → can_merge 的每一步拒绝集推导与旧 VM_SPECIAL 系完全等价，两个关键不变式（hugetlbfs 恒设 DONTEXPAND、__thp_vma_allowable_orders 全部调用点传入 vma-&gt;vm_flags）均经 7.3 源码逐点核实。</li>
+      <li><strong>两条记录级发现</strong>：① cf206d51e 的 commit message 声称「顺手删除一个 VM_BUG_ON」但 diff 中不存在该变更；② IO/MAYWRITE 强制校验只覆盖 mmap/insert 时点，post-hoc vm_flags_set 无再校验（理论残留，无 in-tree 触发者）。</li>
+      <li><strong>VMA 标志语义领域判定为「已占领区」</strong>：Lorenzo 系列 + Zi Yan/Suren/David 三层审阅 + 39-patch 覆盖面，该领域不再具备补丁机会，且 mremap/MREMAP_DONTUNMAP 禁区因他的 locked_vm 双修复（v3/v4 活跃迭代中）进一步扩大。</li>
+      <li><strong>9 个修复复审靶子 + 3 个新发现靶点</strong>因 mm.git 当日重建（hotfixes 分支 SHA 全部重写、旧对象被 gc）需经双通道补拉；断流期经 GitHub 九月镜像 compare 通道抢救出 <strong>truncate 修复 v1 全文</strong>与 <strong>/dev/zero 原系列全文</strong>，两个靶点先行完成预审（见 3.2），其余 8 个落地后回填。</li>
+      <li>附带产出：<strong>akpm/mm.git 分支结构考古</strong>与断流链路下的补拉工程学（标题匹配、cgit 301/n= 陷阱、GitHub 镜像停摆、lore Anubis PoW 破解），已沉淀为可复用方法。</li>
+    </ul>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat"><div class="num">39</div><div class="label">重构系列 patch 总数</div></div>
+    <div class="stat"><div class="num">26</div><div class="label">本轮差分审查成员</div></div>
+    <div class="stat"><div class="num">9+3</div><div class="label">修复复审靶子</div></div>
+    <div class="stat"><div class="num">0</div><div class="label">实质缺陷发现</div></div>
+  </div>
+
+  <!-- ===== 一、缘起与方法论 ===== -->
+  <h1 class="heading">一、第四轮缘起与方法论</h1>
+  <div class="doc-section">
+    <h3 class="heading">1.1 撞车与转向</h3>
+    <p class="paragraph">第三轮我们独立定位的 mremap Committed_AS 泄漏（潜伏 20 年）在发出前被 Lorenzo Stoakes (ARM) 于 10-19 抢先提交进 mm-unstable（b78ed86d8 uncharge 修复 + 4150cd1c0 delta 独立系列），所幸我们的系列尚未外发。教训明确：<strong>mremap 领域 Lorenzo 正活跃展开，后续提交必须避开其射程</strong>。第四轮矿脉随之转向——无需等 torvalds 出窗口，akpm/mm.git 的 hotfixes 分支就是 7.4 窗口 patch 流的集散地。</p>
+    <h3 class="heading">1.2 第二轮方法论的复用</h3>
+    <ul class="list">
+      <li><strong>重构系列逐条逻辑审查</strong>：对声称「No functional change」的重构，逐调用点做<strong>旧拒绝集 / 新拒绝集的差分</strong>，凡谓词替换必推导布尔等价性，凡依赖不变式必到基准源码核实不变式成立；</li>
+      <li><strong>修复复审</strong>：读上游修复，评估其修法是否完备（错误路径、对称站点、兄弟 bug），从中反向学习 bug 模式；</li>
+      <li><strong>质量优先</strong>：cleanup/doc 类一律归档不行动，只追求真实逻辑缺陷。</li>
+    </ul>
+    <p class="paragraph">审查基准为本地 torvalds 7.3 树（/home/ctyun/桌面/linux-mainline，树 SHA 与 torvalds c03c1a14 逐字节一致），patch 全文经 git.kernel.org cgit /patch/ 端点拉取存档于工作区 .temp/r4/。</p>
+  </div>
+
+  <!-- ===== 二、系列差分审查 ===== -->
+  <h1 class="heading">二、VMA_SPECIAL_FLAGS 消除系列差分审查</h1>
+
+  <div class="doc-section">
+    <h3 class="heading">2.1 系列概况</h3>
+    <p class="paragraph noindent">系列名 <em>mm: make VMA flag semantics explicit, eliminate VM_SPECIAL</em>（v6，2026-10-13，Lorenzo Stoakes (ARM)，lore ID 20261013-b4-mmap-prepare-vma-flag-sanify-v6，共 39 patch + cover letter）。动机：VM_SPECIAL 把「是否由核心 mm 管理」「能否扩展/合并」等无关属性搅在一个掩码里，驱动作者长期误用（mlock 滥用 VM_IO 防迁移竞态、uprobes 用 VM_IO 标注内核页映射等）。系列以行为命名的谓词替换掩码，并建立两条强制不变式：<strong>mm-managed 映射不得设置 VMA_IO_BIT</strong>、<strong>不得清除 VMA_MAYWRITE_BIT</strong>，经 mmap/mmap_prepare/insert_vm_struct 三处校验强制执行。审阅阵容：Reviewed-by Zi Yan / Suren Baghdasaryan / Gregory Price，Acked-by David Hildenbrand，Cc 覆盖 40+ 子系统维护人。</p>
+  </div>
+
+  <div class="doc-section">
+    <h3 class="heading">2.2 谓词链与拒绝集推导</h3>
+    <p class="paragraph noindent">系列分四步引入谓词并逐调用点替换，每一步的拒绝集演变如下（以 7.3 的 <code>VM_SPECIAL = {VM_IO, VM_DONTEXPAND, VM_PFNMAP, VM_MIXEDMAP}</code> 为基准）：</p>
+    <div class="table-wrap">
+      <div class="table-caption">谓词定义与 can_merge 拒绝集演变（系列序 v6-15 → v6-17 → v6-30）</div>
+      <table class="table" data-caption="谓词定义与拒绝集演变">
+        <colgroup><col style="width:18%"><col style="width:30%"><col style="width:26%"><col style="width:26%"></colgroup>
+        <thead><tr><th>步骤</th><th>谓词定义</th><th>can_merge 拒绝集</th><th>与上一步差异</th></tr></thead>
+        <tbody>
+          <tr><td>7.3 基准</td><td>!(flags &amp; VM_SPECIAL)</td><td>{IO, DONTEXPAND, PFNMAP, MIXEDMAP}</td><td>—</td></tr>
+          <tr><td>v6-15 mm_managed</td><td>!(PFNMAP|MIXEDMAP|IO)</td><td>managed+DONTEXPAND：{IO, DONTEXPAND, PFNMAP, MIXEDMAP}</td><td class="ok">等价</td></tr>
+          <tr><td>v6-17 fixed_mapping</td><td>PFNMAP|DONTEXPAND</td><td>managed+fixed：{IO, DONTEXPAND, PFNMAP, MIXEDMAP}</td><td class="ok">等价（PFNMAP 重复覆盖无害）</td></tr>
+          <tr><td>v6-30 mm_backed 最终</td><td>hugetlb || (managed &amp;&amp; !fixed)<br>can_merge = mm_backed &amp;&amp; !hugetlb</td><td>{IO, DONTEXPAND, PFNMAP, MIXEDMAP} ∪ {HUGETLB}</td><td class="warn">表面多出 HUGETLB，实际等价（见 2.3 不变式）</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="doc-section alt">
+    <h3 class="heading">2.3 关键不变式逐点核实</h3>
+    <p class="paragraph noindent"><strong>不变式一：hugetlbfs 映射恒同时设置 DONTEXPAND。</strong>7.3 源码 fs/hugetlbfs/inode.c:115 <code>vma_set_flags(vma, VMA_HUGETLB_BIT, VMA_DONTEXPAND_BIT)</code>，原子设置。由此旧代码对 hugetlb VMA 实际经 DONTEXPAND ∈ VM_SPECIAL 拒绝合并/折叠/迁移；新代码的显式 hugetlb 排除与旧语义一致——这是 can_merge 最终拒绝集「多出 HUGETLB 却等价」的根基，也是 v6-29（migrate_vma_setup 删除显式 hugetlb 检查）成立的前提。</p>
+    <p class="paragraph noindent"><strong>不变式二：__thp_vma_allowable_orders 的检查从「vm_flags 参数」改为「解引用 vma」无语义漂移。</strong>逐一核验 7.3 全部调用点：khugepaged.c:1630/2887/3195（collapse_possible_orders/khugepaged 扫描/MADV_COLLAPSE）与 khugepaged.c:1088/1887 均直接传 <code>vma-&gt;vm_flags</code>；madvise.c:187 的 khugepaged_enter_vma 调用发生在 <code>vma-&gt;flags = new_vma_flags</code> 提交<strong>之后</strong>，前瞻 flags 与实际 flags 一致；TVA_PAGEFAULT / TVA_SMAPS 两类调用点被 <code>!in_pf &amp;&amp; !smaps</code> 守卫跳过新检查；vma.c:1074/1196/2719 的 vma 合并路径由 can_merge 门禁结构性保证合并双方谓词位一致。旧 VM_NO_KHUGEPAGED = SPECIAL|HUGETLB 与新 <code>!mm_backed || hugetlb</code> 的拒绝集逐位重合。</p>
+    <p class="paragraph noindent"><strong>逐调用点差分汇总（全部 NFC 验证通过）</strong>：vma_flags_can_merge、mremap check_prep_vma（DONTEXPAND|PFNMAP → fixed_mapping 恒等）、migrate_vma_setup（261969e17，含 v6-29 的显式 hugetlb 删除先导）、MADV_DODUMP（6ee17eed4）、MADV_DOFORK（e91842c8b）、userfaultfd vma_move_compatible 与 vma_can_userfault 两函数（99c65dc04——旧代码本就有 hugetlb carve-out，方向无翻转）、guard pages is_valid_guard_vma（f67a0ef3c——新代码显式保留 <code>|| vma_is_hugetlb(vma)</code>，拒绝集 {SPECIAL}∪{HUGETLB} 逐位一致）。</p>
+  </div>
+
+  <div class="doc-section">
+    <h3 class="heading">2.4 逐 patch 审查结论总表（26 成员）</h3>
+    <div class="table-wrap">
+      <div class="table-caption">26 个到手成员的差分审查结论（NN = 系列序号）</div>
+      <table class="table" data-caption="系列成员审查结论">
+        <colgroup><col style="width:7%"><col style="width:9%"><col style="width:44%"><col style="width:40%"></colgroup>
+        <thead><tr><th>NN</th><th>SHA</th><th>主题</th><th>结论 / 关键验证</th></tr></thead>
+        <tbody>
+          <tr><td>0</td><td>c7f5ccfa5</td><td>fix mmap_prepare file handling, remove file_doesnt_need_get</td><td class="ok">引用计数重构，六路径对平（见 2.5-D）</td></tr>
+          <tr><td>2</td><td>2f82c4dfb</td><td>introduce and use vma_[flags_]can_merge()</td><td class="ok">纯抽象化，NFC</td></tr>
+          <tr><td>3</td><td>912816426</td><td>consistently validate VMA state after mmap[_prepare] hooks</td><td class="ok">校验推广 + vm_end 扩展；附带修复错误路径驱动状态泄漏（新增 zap+close）</td></tr>
+          <tr><td>4</td><td>c98fc1312</td><td>ensure mmap_prepare doesn't set actions on a mergeable vma</td><td class="ok">防御性校验，今日不可达（所有 action 均设不可合并标志）</td></tr>
+          <tr><td>5</td><td>e65247e5b</td><td>make map_kernel_pages_[prepare,complete] internal and unexported</td><td class="ok">in-tree 仅 mm 内部调用，安全</td></tr>
+          <tr><td>6</td><td>afe9a6c07</td><td>tidy up map kernel pages enum values</td><td class="ok">纯改名</td></tr>
+          <tr><td>7</td><td>e4bb45be7</td><td>assert mmap lock held, use new flags API in vm_insert_page[s]</td><td class="ok">修正 trylock 式断言 bug + BUG_ON 降级 WARN</td></tr>
+          <tr><td>8</td><td>ad325cbcb</td><td>add mmap action for discontiguous kernel page mapping</td><td class="ok">新状态机，批量算术与 ABORT 语义健全（usbmon/sg 依赖）</td></tr>
+          <tr><td>15</td><td>328a20cf7</td><td>add vma[_flags]_is_mm_managed() predicates</td><td class="ok">中间态拒绝集等价</td></tr>
+          <tr><td>16</td><td>29c9a3ce6</td><td>only allow mmap to clear VMA_MAYWRITE_BIT if not mm-managed</td><td class="ok">17 个 in-tree 清除点审计全过（见 2.5-A）</td></tr>
+          <tr><td>17</td><td>d8f74e2a7</td><td>add and use vma_[flags]_is_fixed_mapping</td><td class="ok">khugepaged 换 can_merge，删 VM_NO_KHUGEPAGED；调用链核验无漂移</td></tr>
+          <tr><td>21</td><td>5604904bd</td><td>gup: error out early on !VMA_MAYREAD_BIT VMAs</td><td class="ok">PROT_NONE 旧路径已早退；exec-only 新旧均 -EFAULT，仅 XOL 受影响</td></tr>
+          <tr><td>22</td><td>8ac06f2d7</td><td>uprobes: remove VM_IO, set VM_MIXEDMAP</td><td class="ok">core dump 论证核实（vm_special_mapping .name → always_dump_vma）</td></tr>
+          <tr><td>23</td><td>5258d1514</td><td>mlock: clear VMA_LOCKED_MASK over mmap callback</td><td class="ok">无 in-tree 驱动读 VM_LOCKED；恢复条件与 __mmap_complete 既有纪律吻合</td></tr>
+          <tr><td>24</td><td>392aa5c81</td><td>mlock: eliminate weird VMA_IO_BIT abuse and simplify</td><td class="ok">竞态重写自洽（LOCKONFAULT-only 瞬态消费者全审，见 2.5-E）</td></tr>
+          <tr><td>25</td><td>40cbe513f</td><td>enforce that mm-managed mappings may not set VMA_IO_BIT</td><td class="ok">过渡态强制（与 v6-26 成对）</td></tr>
+          <tr><td>26</td><td>b4809358c</td><td>remove VMA_IO_BIT check in vma[_flags]_is_mm_managed()</td><td class="ok">zap/mprotect/NUMA 扫描等 5 处开码检查转谓词，拒绝集一致</td></tr>
+          <tr><td>27</td><td>16233e64b</td><td>remove hugetlb_inline.h</td><td class="ok">头文件合并，去 ifdeffery</td></tr>
+          <tr><td>28</td><td>fc3c7b263</td><td>rename is_vm_hugetlb_page() to vma_is_hugetlb()</td><td class="ok">37 文件机械改名</td></tr>
+          <tr><td>29</td><td>cf206d51e</td><td>drop some redundant checks around hugetlb VMAs</td><td class="warn">NFC 成立，但 commit message 与 diff 不符（见 2.6-①）</td></tr>
+          <tr><td>30</td><td>6ee17eed4</td><td>introduce vma[_flags]_is_mm_backed()</td><td class="ok">can_merge/DODUMP/khugepaged 三处最终形态拒绝集一致</td></tr>
+          <tr><td>31</td><td>f67a0ef3c</td><td>update is_valid_guard_vma() to use vma_is_mm_backed()</td><td class="ok">hugetlb 显式排除在，拒绝集逐位一致</td></tr>
+          <tr><td>32</td><td>99c65dc04</td><td>uffd: use predicates for userfaultfd checks</td><td class="ok">两函数逐位一致，旧 hugetlb carve-out 方向保持</td></tr>
+          <tr><td>33</td><td>e91842c8b</td><td>madvise: use predicates for MADV_DOFORK</td><td class="ok">SPECIAL → !mm_backed||hugetlb 等价</td></tr>
+          <tr><td>36</td><td>261969e17</td><td>avoid use of VMA_SPECIAL_FLAGS in migrate_vma_setup()</td><td class="ok">显式 hugetlb 排除回归（SPECIAL 消失后必要）</td></tr>
+          <tr><td>37</td><td>f7e6c70b6</td><td>eliminate VM_SPECIAL, VMA_SPECIAL_FLAGS</td><td class="ok">纯删除，所有调用点已迁移</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="paragraph noindent" style="font-size:13px;color:#5b6b80;">注：系列 39 成员中其余 13 个（NN = 1, 9–14, 18–20, 34–35, 38–39）为 usbmon/sg/hfi1/ALSA 等驱动转换与 userland 测试更新，当日 git.kernel.org 断流期未能全部拉取，其中实质成员经双通道补拉后补审。</p>
+  </div>
+
+  <div class="doc-section alt">
+    <h3 class="heading">2.5 深挖验证记录</h3>
+    <p class="paragraph noindent"><strong>A. MAYWRITE 清除点审计（29c9a3ce6）。</strong>新校验「mm-managed 映射不得清除 VMA_MAYWRITE_BIT」若漏网一个 in-tree 站点即驱动 mmap 直接失败。全树 grep 得 17 个清除站点：RDMA（ionic/hfi1/bnxt_re/mlx5×2）、DRM GEM（vc4/i915/panthor/amdgpu——均经 drm_gem.c:1253 <code>VM_IO|VM_PFNMAP|VM_DONTEXPAND|VM_DONTDUMP</code> 路径）、ptp_vmclock、oradax、pfr_telemetry、ublk、bpf arena。逐一核实全部为非 mm-managed（remap_pfn_range 设 PFNMAP、GEM 设 PFNMAP|IO、arena 由本系列加 MIXEDMAP），其中 ublk 的动机（防守护进程 mprotect 提权写命令缓冲）与校验语义完全互补。<strong>无 in-tree 回归。</strong></p>
+    <p class="paragraph noindent"><strong>B. vm_start/vm_end 校验站点审计（912816426）。</strong>新校验禁止驱动改动 VMA 边界。全树搜得永久改动者：无。hfi1 与 comedi 均为循环内临时改动后恢复原值；68328fb 的 vm_start 改写位于 <code>#ifndef MMU</code> 的 uClinux 专属路径（nommu 不走该校验）。hfi1 已由本系列另行转换。<strong>无 in-tree 回归。</strong></p>
+    <p class="paragraph noindent"><strong>C. mmap hook 后置校验的附带修复（912816426）。</strong>__mmap_new_file_vma 错误路径新增 zap_vma + vma_close：修复了驱动在 .mmap 中建立、在 -&gt;close 中释放的状态（如 usbmon ring）在 mmap 失败路径泄漏的问题；vma_close 调用后安装 dummy vm_ops，结构性杜绝 double-close。</p>
+    <p class="paragraph noindent"><strong>D. mmap_prepare 文件引用计数重构（c7f5ccfa5）。</strong>逐路径追踪 map-&gt;file（mmap 指定）与 map-&gt;vm_file（hook 可替换）双轨引用：① prepare 替换文件成功未合并——hook 引用所有权转移给 VMA；② 替换后合并——合并邻 VMA 持有自己的引用，map_put_vm_file 释放多余引用；③ prepare 替换后错误——abort_munmap 路径 map_put_vm_file 释放；④ deprecated .mmap 回调经 vma_set_file 替换（get 新 fput 旧）+ map-&gt;vm_file 在 mmap_file 返回后、错误检查前更新——嵌套替换（A→B→C）账目经 vma_set_file 接力后仍然对平；⑤ compat 层 desc-&gt;vm_file 引用转移 + 错误路径 fput；⑥ dev_zero 匿名化路径。<strong>六路径无泄漏、无双重释放。</strong></p>
+    <p class="paragraph noindent"><strong>E. mlock 迁移竞态重写（392aa5c81）。</strong>旧机制以瞬态 VM_IO 阻断迁移双重计数；新机制改用「LOCKONFAULT 置位 + LOCKED 清零」的瞬态组合态（正常状态恒为 LOCKONFAULT ⇒ LOCKED，二者总是同置同清），配合 walk-&gt;private 传入 lock 布尔、rmap 侧 try_to_unmap_one/try_to_migrate_one 改查 VMA_LOCKED_MASK 并在 mlock_drain_local 前置检查。瞬态的消费者全数核验：gup.c populate 路径被 vma 写锁串行化（并发 mlock 互斥于 vma_start_write）；smaps 的 "lf" 无 "lg" 瞬态显示与旧 VM_IO 瞬态同级（表象怪异、无语义影响）；trace/mmflags 仅展示。<strong>深度竞态形式验证超出本轮范围，未发现设计缺陷。</strong></p>
+    <p class="paragraph noindent"><strong>F. vm_insert_pages 断言修正（e4bb45be7）。</strong>旧代码用 <code>VM_WARN_ON_ONCE(mmap_read_trylock(mm))</code> 断言写锁——trylock 成功（即无人持锁）才告警，持读锁时 trylock 失败反而静默通过，属断言逻辑反转 bug；新代码换 mmap_assert_write_locked()，同时将 PFNMAP 冲突的 BUG_ON 降级为 VM_WARN_ON_ONCE。</p>
+  </div>
+
+  <div class="doc-section">
+    <h3 class="heading">2.6 审查发现（记录级，不构成补丁机会）</h3>
+    <ol class="list">
+      <li><strong>cf206d51e commit message 与 diff 不符</strong>：正文声称「While we're here also drop a VM_BUG_ON() which the simplified check above makes unreachable」，但 diffstat 仅 drivers/gpu/drm/drm_gpusvm.c（3 行）与 mm/migrate_device.c（4 行）两处 hunk，全部为显式 hugetlb 检查删除与 vma_is_anonymous 化简，<strong>不含任何 VM_BUG_ON 删除</strong>。可向列表礼貌指出，供作者澄清或修正 changelog。</li>
+      <li><strong>校验时点残留</strong>：VMA_IO_BIT/MAYWRITE 强制只在 mmap、mmap_prepare、insert_vm_struct 三个建立时点执行，VMA 生命周期内的 post-hoc vm_flags_set 不再触发校验。mlock 滥用已由本系列消除，当前无已知 in-tree post-hoc 设置者，但该不变式在「建立后」阶段靠约定维持——属审计注记，非缺陷。</li>
+    </ol>
+  </div>
+
+  <!-- ===== 三、修复复审 ===== -->
+  <h1 class="heading">三、修复复审（9 靶子 + 3 新发现）</h1>
+  <div class="doc-section">
+    <h3 class="heading">3.1 复审对象与状态</h3>
+    <p class="paragraph noindent">第三轮结束时从 mm-unstable 200 条提交清单中圈定 9 个新鲜 bug fix 作为复审靶子；补拉过程中在 hotfixes-stable 分支顶端又发现 3 个同领域新靶点（Lorenzo 的 mremap locked_vm 双修复与 /dev/zero 修复，均为 10-20 新提交）。mm.git 当日重建导致 9 个靶子的原 SHA 全部失效（hotfixes 分支重写 + 对象 gc），正经「kernel.org hotfixes-unstable 分支标题匹配」与「lore Anubis PoW 破解」双通道补拉。断流期启用第三通道：<strong>GitHub kernelorg-mirror 的 mm-hotfixes-unstable 九月快照</strong>（tip = dfa23b49d05，恰好是 truncate 修复 v1），经 compare API 一次调用取得整个 33-patch 热修队列合并 diff——v1 及其上下文借此完成预审。</p>
+    <div class="table-wrap">
+      <div class="table-caption">修复复审靶子总表</div>
+      <table class="table" data-caption="修复复审靶子">
+        <colgroup><col style="width:10%"><col style="width:12%"><col style="width:14%"><col style="width:8%"><col style="width:46%"><col style="width:10%"></colgroup>
+        <thead><tr><th>原 SHA</th><th>作者</th><th>领域</th><th>规模</th><th>标题</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td>eaca38c6b</td><td>Zhang Yi</td><td>truncate</td><td>-39/+71</td><td>mm/truncate: fix data loss when splitting straddling large folios fails（v3，配套系列 4 patch）</td><td><strong>v1 已预审</strong> · v3 补拉中</td></tr>
+          <tr><td>24066022b</td><td>Jiayuan Chen</td><td>swap</td><td>-3/+13</td><td>mm/swap: fix swap_cache_get_folio() returning a folio that left the swap cache</td><td>补拉中</td></tr>
+          <tr><td>a01aea6bc</td><td>Cen Zhang (Microsoft)</td><td>userfaultfd</td><td>-1/+5</td><td>userfaultfd: fix UFFDIO_MOVE livelock on large folio with extra references</td><td>补拉中</td></tr>
+          <tr><td>573635a66</td><td>Rik van Riel</td><td>page_alloc</td><td>-2/+4</td><td>mm/page_alloc: count guard pages as free again when their buddy merges</td><td>补拉中</td></tr>
+          <tr><td>2c30baf59</td><td>Stian Halseth</td><td>procfs</td><td>-1/+6</td><td>fs/proc/task_mmu: fix lost maps entries above 2^63</td><td>补拉中</td></tr>
+          <tr><td>e2d7b28d3</td><td>Hui Zhu</td><td>vmscan</td><td>-0/+5</td><td>mm/vmscan: fix missing NR_ISOLATED counter update in MGLRU reclaim path</td><td>补拉中</td></tr>
+          <tr><td>09a1f4c41</td><td>Weilin Tong</td><td>ipc/shm</td><td>-19/+4</td><td>ipc/shm: fix RSS accounting for hugetlb shared memory</td><td>补拉中</td></tr>
+          <tr><td>dcce08ea1</td><td>Lorenzo Stoakes (ARM)</td><td>mmap_lock</td><td>-29/+120</td><td>mm/vma: avoid spurious write locks when mm-&gt;mm_lock_seq overflows（v6）</td><td>补拉中</td></tr>
+          <tr><td>4d97e70c1</td><td>David Hildenbrand (Arm)</td><td>memory</td><td>-0/+14</td><td>mm: disallow ioremap'ing ordinary RAM in generic_access_phys()</td><td>补拉中</td></tr>
+          <tr><td>597e4b9ab4</td><td>Lorenzo Stoakes (ARM)</td><td>mremap</td><td>—</td><td>mm/mremap: fix locked_vm leak by splitting VMA for MREMAP_DONTUNMAP（v3）</td><td>新靶点</td></tr>
+          <tr><td>838bb60dc2</td><td>Lorenzo Stoakes (ARM)</td><td>mremap</td><td>—</td><td>mm/mremap: fix locked_vm leak from MREMAP_DONTUNMAP self-merge（v4）</td><td>新靶点</td></tr>
+          <tr><td>d3ed3a4095</td><td>Lorenzo Stoakes (ARM)</td><td>char/mem</td><td>—</td><td>drivers/char/mem: mmap readonly MAP_SHARED-/dev/zero correctly</td><td><strong>系列已预审</strong> · 热修补拉中</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="doc-section alt" id="fixreview-details">
+    <h3 class="heading">3.2 复审结论</h3>
+    <p class="paragraph noindent">断流期经 GitHub 九月镜像 compare 通道抢救出 <strong>Zhang Yi truncate 修复 v1 全文</strong>（dfa23b49d05，9-09 曾居 mm-hotfixes-unstable 顶端）与 <strong>Lorenzo /dev/zero 纯匿名化系列全文</strong>（2f1196c2015..da77ab51876，9-08），两个靶点先行完成预审；其余 8 个修复仍在双通道补拉，落地后逐条回填。</p>
+
+    <h3 class="heading">3.2.1 truncate 跨界大 folio 数据丢失修复（Zhang Yi · v1 预审，v3 对缝待补）</h3>
+    <p class="paragraph">7.3 基线缺陷形态（已对照本地源码逐点核实）：truncate_inode_pages_range 主循环（truncate.c:437–466）与 shmem_undo_range 均按 <code>folio-&gt;index</code> 收集并整只丢弃 in-range folio，对跨界 folio 的唯一保护是 truncate_inode_partial_folio 的布尔返回协议——返回 false 时调用方收缩 start/end 跳过。三条丢失路径：<strong>①</strong> lend 落于 min_order folio 内部时该 folio 的 index &lt; end，主循环整只丢弃，越界部分的脏数据随缓存静默丢写；<strong>②</strong> 尾部隔离静默跳过——<code>folio_trylock(folio2)</code> 冲突直接 goto out 且无任何标记，尾 folio 未分裂却被主循环整只吞掉；<strong>③</strong> head 侧分裂失败 + 非脏 folio 走整只丢弃（truncate.c:290–293），依赖「非脏⟺有后备」不变式，v1 有意保留。</p>
+    <p class="paragraph">v1 修复设计（三文件：mm/truncate.c + mm/internal.h 签名 + mm/shmem.c 三个调用点，此前担心的签名不兼容已排除）：<strong>输出安全丢弃区间协议</strong>——函数改为 <code>truncate_inode_partial_folio(folio, lstart, lend, &amp;pstart, &amp;pend)</code>，pstart = <code>round_up(lstart, min_nrbytes)</code>、pend = <code>round_down(lend+1, min_nrbytes)</code>，跨界 folio 从主循环边界整体排除；<strong>tail_isolated 状态机</strong>——trylock 冲突或尾部分裂失败时 pend 回拉至 folio2-&gt;index，整只跨界尾 folio 保守保留（宁欠勿损）；<strong>retry 循环 + 包含性复验</strong>——<code>page_folio(split_at2) != folio2</code> 时重取，附带封堵 7.3 的一个并发窗口（try_get 与 trylock 之间并发分裂可令 split_at2 不再属于 folio2，旧代码把外部页传给 folio_split，前置条件违约，潜在误切/VM_BUG 风险）；返回值语义改为「是否发生过分裂」，真实消费者是 shmem.c 主循环的分裂后重扫判定（NULL/NULL 调用），设计自洽。</p>
+    <p class="paragraph">预审结论：<strong>方向正确，几何推演与 folio_split 契约吻合</strong>（split_at 所属新 folio 为 order-min_order、其余保持尽量大——head folio 在起始边界切，tail folio 先于 page0 切下首个 min_order 块、再于末边界切）。两条保守取舍均为防丢失方向，无反向风险。v3（-39/+71，4-patch 系列：数据丢失修复 + end-edge 跨界查找 + 边界对齐 + 返回值澄清）相对 v1 的增量待补拉落地后对缝，确认是否处理 v1 保留的整只丢弃路径。</p>
+
+    <h3 class="heading">3.2.2 /dev/zero 纯匿名化系列预审（新靶点 d3ed3a4 的修复对象）</h3>
+    <p class="paragraph">Lorenzo 9-08 系列（6 patch）把 MAP_PRIVATE-/dev/zero 从「半匿名特例」改造为真匿名：char-mem.c 移入 mm/、新增 <code>file_is_dev_zero()</code>（f_op 指针判定）、mmap_zero_prepare 不再显式匿名化、core mm 在 call_mmap_prepare 尾部统一转换（<code>map_set_anon</code>：file=NULL、vm_ops=NULL、pgoff=addr&gt;&gt;PAGE_SHIFT）。三处「半匿名」特判（linear_anon_page_index、assert_sane_pgoff、vma_pgoff 文档）全部删除，语义统一收益明确。</p>
+    <p class="paragraph">核实要点：<strong>①</strong> 新增 <code>if (!desc-&gt;vm_ops) return -EINVAL</code> 检查与 zero 的 MAP_PRIVATE 路径兼容——mm/vma.c:2877 desc 初始化器 <code>.vm_ops = &amp;vma_dummy_vm_ops</code> 非 NULL，先过检查再被转换置空；<strong>②</strong> 用户可见变化：MAP_PRIVATE-/dev/zero 映射不再出现在 /proc/self/maps 文件列（proc-self-map-files 两个自测改用 /proc/self/exe 印证）；<strong>③</strong> merge 自测覆盖相邻合并与 faulted-unfaulted 夹心合并，tools/vma 单测断言 pgoff 重置为匿名语义。</p>
+    <p class="paragraph">待热修 d3ed3a4 落地对缝的疑点（其标题指向 readonly MAP_SHARED-/dev/zero）：系列中 MAP_SHARED 仍走 shmem_zero_setup_desc 不经转换，问题应集中于 mmap_file() 错误路径语义变化（<code>err || !vma-&gt;vm_ops</code> 均置 dummy ops——旧接口驱动置 NULL 的语义被收紧）、call_action_prepare 先于转换执行（action 钩子仍见 /dev/zero file）、只读描述符的 shmem 安装路径三者之一。</p>
+
+    <aside class="callout" data-variant="warning">
+      <p>其余 8 个修复靶子（swap/uffd/page_alloc/procfs/vmscan/shm/mmap_lock/memory）双通道补拉进行中，落地后逐条回填。locked_vm 双修复（597e4b9/838bb60）的系列上下文已备齐：8-28 的 397432cab17「mm/mremap: account mm-&gt;locked_vm correctly for MREMAP_DONTUNMAP」（vrm_stat_account 移序 + dontunmap 分支重构）及九月队列 33-patch 全量 diff 已存档于 .temp/r4/sep-hu/。</p>
+    </aside>
+  </div>
+
+  <!-- ===== 四、新观察靶点 ===== -->
+  <h1 class="heading">四、新观察靶点与领域态势</h1>
+  <div class="doc-section">
+    <p class="paragraph noindent">hotfixes-stable 分支顶端确认了 Lorenzo 在 mremap/MREMAP_DONTUNMAP 领域的持续活跃：<strong>locked_vm 泄漏双修复</strong>（splitting VMA 路径 v3 + self-merge 路径 v4）与 <strong>/dev/zero 只读 MAP_SHARED mmap 修复</strong>。连同 10-19 的 Committed_AS 修复（b78ed86d8）与 delta 修复（4150cd1c0），mremap 函数族的错误路径已被其系统性清扫——<strong>该禁区维持且扩大</strong>，任何后续提交前必须 lore 判重并避开其活跃系列。</p>
+    <p class="paragraph noindent">另一条值得跟踪的线索：Zhang Yi 的 truncate 系列从 9 月初版迭代至 v3（数据丢失修复 + end-edge 跨界查找 + 边界对齐 + 返回值澄清共 4 patch），显示 truncate 大 folio 分裂失败路径仍是活跃矿脉——其 v1 曾居 mm-hotfixes-unstable 顶端（9-10），修复复审落地后可顺系列评估其完备性。</p>
+    <p class="paragraph noindent">/dev/zero 系列已从当前 mm-unstable 毕业（p0 快照零匹配），热修 d3ed3a4 出现在 hotfixes-stable 顶端亦印证其已进入 Linus 侧合并流程——<strong>「原始系列 + 合并后热修」构成完整案例</strong>。原系列全文经九月镜像抢救并完成预审（见 3.2.2），热修落地后可直接对缝定位其修复的具体角落。</p>
+  </div>
+
+  <!-- ===== 五、工程考古 ===== -->
+  <h1 class="heading">五、akpm/mm.git 考古与补拉工程学</h1>
+  <div class="doc-section">
+    <p class="paragraph noindent">本轮补拉横跨数次断流窗口，沉淀出以下可复用的工程结论：</p>
+    <ul class="list">
+      <li><strong>分支结构真相</strong>：master 当前为纯主线基底（tip = ff47652a，cifs-fixes-7.3-rc6 合并），mm patch 不在 master 顶端；<strong>新 patch 全部住在 mm-hotfixes-stable（已稳定热修）与 mm-hotfixes-unstable（新热修）两个分支</strong>。hotfixes-stable 当前仅 7 个新 commit（基线为 09-27 的 mm-stable rollup 被 Linus 合并后的主线），9 个复审靶子在 unstable 分支。</li>
+      <li><strong>SHA 稳定性</strong>：hotfixes 分支每日重建，patch 的 mm.git SHA 寿命以小时计（我们 15:01 抓的快照，15:31 时已有 12 个对象被 gc）。任何引用必须<strong>记标题而非 SHA</strong>；补拉靠「标题匹配新 SHA」或直接走 lore 消息 ID。</li>
+      <li><strong>cgit 四坑</strong>：① <code>?h=master</code>（默认分支）被 301 规范化剥离，curl 必须加 <code>-L</code> 或去掉 h= 参数（非默认分支不受影响）；② <code>n=</code> 分页参数被忽略，每页固定 200 条；③ 页面约 77KB、断流链路 75–120 秒/页，须以 <code>cgit 1.3.1-korg</code> 页脚做完整性校验防截断；④ <code>?q=</code> 提交搜索在该实例不生效。</li>
+      <li><strong>镜像生态</strong>：GitHub kernelorg-mirror/linux_kernel_git_akpm_mm 的 master 已同步但 <strong>mm-* 分支停摆于 9 月</strong>——对 10 月新补丁不可用，但<strong>九月快照是历史版本的宝库</strong>（truncate v1、/dev/zero 原系列、33-patch 热修队列均从中救出）；kernel.googlesource.com 镜像本网络不可达；spinics/mail-archive 均不可用。</li>
+      <li><strong>GitHub API compare 通道（本轮新增）</strong>：github.com 网页与 smart-http 断流时 api.github.com 仍稳定；镜像九月快照上的连续提交队列可用 <code>compare/{base}...{tip}</code> + <code>Accept: application/vnd.github.diff</code> <strong>一次请求整体取出</strong>（本轮 33-patch 队列 74KB、6-patch 系列 16KB 各一次调用），逐 commit 方案的配额消耗从 ~39 次降至 3 次。</li>
+      <li><strong>令牌与配额</strong>：会话中期 PAT 被吊销（401 Bad credentials，早前推送后已提醒用户 revoke，实际确认已执行）；匿名 API 配额仅 60/小时且出口 IP 为共享 NAT（58.53.165.7），随时被同 IP 流量耗尽——公开仓库数据走无鉴权调用 + compare 批取 + 优先级排序（修复先于系列上下文）是唯一可行姿势。</li>
+      <li><strong>lore Anubis 破解</strong>：lore.kernel.org Web 界面被 Anubis v1.26.2 反爬门拦截，但 <strong>atom feed 端点豁免</strong>；PoW 为 <code>sha256(randomData + str(nonce))</code> 十六进制前导零（difficulty=4，亚秒可解），提交 pass-challenge 端点换取放行 cookie 后 /raw 全文端点可用。已实现完整求解器（r4-anubis-solve2.py / r4-lore-backfill.py）。</li>
+      <li><strong>网络窗口学</strong>：当日链路呈「通 15–20 分钟 / 断 10–40 分钟」交替（14:34–15:43 长窗口后转短窗），断流期 lore 与 kernel.org 同时不可达（同一路由）。补拉脚本应内置小页面预检 + 页间缓存断点续传 + 内容完整性校验。</li>
+      <li><strong>两个幽灵 SHA</strong>：上一轮枚举出的 bd7eb1f01e 与 d7346a3b0e 不存在于任何已抓取快照（mailmap/日志页均无），恒 404——枚举产物必须落盘可溯源，避免幽灵目标浪费重试预算。</li>
+    </ul>
+  </div>
+
+  <!-- ===== 六、避坑库与下一步 ===== -->
+  <h1 class="heading">六、避坑库增量与下一步</h1>
+  <div class="doc-section">
+    <h3 class="heading">6.1 避坑库增量（累计 17 证伪 + 1 撞车 + 8 低价值 + 3 新增）</h3>
+    <ol class="list">
+      <li><strong>领域判定：VMA 标志语义 = 已占领区</strong>。Lorenzo 39-patch 系列经本轮 26 成员差分全部验证 NFC，配套三层审阅——任何该领域的「改进」都会撞上其活跃重构。该条目替代此前对 migrate_vma/khugepaged/madvise 等独立调用点的散点关注。</li>
+      <li><strong>禁区扩大：mremap/MREMAP_DONTUNMAP 全函数族</strong>。Committed_AS（b78ed86d8）、delta（4150cd1c0）、locked_vm×2（597e4b9/838bb60）在 72 小时内连续落点，Lorenzo 正系统性清扫该族错误路径。</li>
+      <li><strong>流程判定：mm.git SHA 不可引用</strong>。hotfixes 分支重建 + gc 使 SHA 寿命以小时计；第四轮因此损耗约 3 小时补拉。今后 mm-unstable 矿脉作业统一先抓标题清单（含作者/日期），patch 全文即抓即审不过夜。</li>
+    </ol>
+    <h3 class="heading">6.2 下一步</h3>
+    <ul class="list">
+      <li>其余 8 个修复靶子落地后回填第三章复审结论；truncate v3 与 v1 做增量对缝，确认 v3 是否处理 v1 保留的整只丢弃路径；d3ed3a4 热修与 3.2.2 疑点清单对缝；</li>
+      <li>系列 13 个未到手成员（usbmon/sg/hfi1/ALSA 转换等）经双通道补齐后补审，重点核对驱动转换是否完整建立「非 mm-managed」标志（29c9a3ce6 校验的依赖面）；</li>
+      <li>性能观察项 O-1（slabobj_ext 记账批量化）、O-2（批 swapin cluster lock 合并）、O-3（KHO preserve folio 清零）维持跟踪，均为作者活跃迭代的新框架，只跟不抢；</li>
+      <li>第五轮候选方向：truncate 大 folio 分裂失败路径（Zhang Yi 系列复审后评估）、以及 hotfixes-unstable 新进提交的持续滚动审查。</li>
+    </ul>
+  </div>
+
+  <div class="divider"><span class="line"></span><span class="diamond"></span><span class="line"></span></div>
+
+  <!-- ===== 尾页 ===== -->
+  <section class="title end_page">
+    <h1>第四轮小结</h1>
+    <p>39-patch 重构系列差分审查：26 成员全部 NFC 验证通过，收获两条记录级发现<br>truncate v1 与 /dev/zero 系列经九月镜像预审完毕 · 其余 8 靶子双通道补拉中<br><br>基准树 Linux 7.3 · mm-unstable 7.4 窗口 · 2026-10-20</p>
+  </section>
+
+</body>
+</html>

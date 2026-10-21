@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mm 子系统 Patch 机会扫描报告（Linux 7.3-rc4）</title>
+<style>
+/* ========== Reset & Base ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { min-height: 100%; }
+body {
+  position: relative;
+  font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", "Noto Sans SC", sans-serif;
+  color: #1f2d3d;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 40px 24px;
+  background: linear-gradient(160deg, #f8fafc 0%, #ffffff 45%, #cfe0f5 100%);
+  min-height: 100vh;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 45% 35% at 12% 8%, rgba(255,255,255,0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 88% 90%, rgba(255,255,255,0.45) 0%, transparent 55%);
+}
+body > * { position: relative; z-index: 1; }
+
+/* ========== 封面 Hero ========== */
+.title {
+  position: relative;
+  overflow: hidden;
+  padding: 56px 40px;
+  text-align: center;
+  background: linear-gradient(135deg, #1e3a5f 0%, #3b82f6 50%, #4f8ef7 100%);
+  color: #ffffff;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+}
+.title::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 70% 55% at 18% 82%, rgba(255,255,255,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 82% 18%, rgba(255,255,255,0.08) 0%, transparent 55%);
+  pointer-events: none;
+}
+.title > * { position: relative; z-index: 1; }
+.title h1 { font-size: 28px; font-weight: 800; margin: 0 0 14px 0; letter-spacing: 1px; color: #ffffff; }
+.title .accent-line { width: 48px; height: 3px; background: rgba(255,255,255,0.85); margin: 0 auto 18px; border-radius: 2px; }
+.title p { font-size: 15px; color: rgba(255,255,255,0.85); margin: 0; line-height: 1.7; }
+
+/* ========== 章节标题 ========== */
+h1.heading {
+  font-size: 28px;
+  color: #0f1e33;
+  margin: 36px 0 16px 0;
+  font-weight: 700;
+  border-left: 4px solid #3b82f6;
+  padding-left: 16px;
+}
+h2.heading {
+  font-size: 22px;
+  color: #0f1e33;
+  margin: 28px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #c9d6f3;
+  font-weight: 600;
+}
+h3.heading {
+  font-size: 18px;
+  color: #0f1e33;
+  margin: 20px 0 10px;
+  font-weight: 600;
+}
+
+/* ========== 正文 / 列表 ========== */
+.paragraph { font-size: 15px; color: #1f2d3d; line-height: 1.8; margin: 0 0 16px 0; }
+.list { margin: 0 0 16px 0; padding-left: 24px; font-size: 15px; color: #1f2d3d; line-height: 1.8; }
+.list li { margin-bottom: 8px; }
+.list li::marker { color: #3b82f6; }
+
+/* ========== 正文区卡片化容器 ========== */
+.doc-section {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 24px 28px;
+  margin: 0 0 16px 0;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+}
+.doc-section.alt { background: #e6edf6; box-shadow: none; }
+
+/* ========== callout ========== */
+.callout {
+  margin: 0 0 16px 0;
+  padding: 16px 24px;
+  background: #e8f0fe;
+  border-left: 4px solid #3b82f6;
+  border-radius: 8px;
+}
+.callout[data-variant="warning"] { background: #FFF3E0; border-left-color: #d97706; }
+.callout[data-variant="quote"]   { background: #f0fdfa; border-left-color: #14b8a6; }
+.callout p { font-size: 15px; color: #1f2d3d; margin: 0; line-height: 1.8; }
+
+/* ========== 表格 ========== */
+.table-wrap {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+  overflow: hidden;
+  margin: 0 0 16px 0;
+}
+.table-caption {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #c9d6f3, #e8f0fe);
+  color: #0f1e33;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  border-bottom: 1px solid #dbe4ef;
+}
+table.table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
+table.table thead th {
+  padding: 12px 16px;
+  text-align: left;
+  background: #c9d6f3;
+  color: #0f1e33;
+  font-weight: 700;
+  border-bottom: 2px solid #dbe4ef;
+  word-break: break-word;
+}
+table.table tbody td { padding: 12px 16px; border-bottom: 1px solid #dbe4ef; color: #1f2d3d; word-break: break-word; }
+table.table tbody tr:last-child td { border-bottom: none; }
+table.table tbody tr:hover { background: #e8f0fe; }
+table.table code, .doc-section code, .callout code {
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-size: 13px;
+  background: #eef5ff;
+  color: #0a1626;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* ========== stat ========== */
+.stat-grid { display: flex; gap: 16px; margin: 0 0 16px 0; }
+.stat {
+  flex: 1;
+  text-align: center;
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  border-top: 3px solid #3b82f6;
+}
+.stat .num { font-size: 28px; color: #3b82f6; font-weight: 800; line-height: 1.1; }
+.stat .label { font-size: 12px; color: #5b6b80; margin-top: 6px; }
+
+/* ========== 优先级胶囊 ========== */
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.badge.p1 { background: #FCE4EC; color: #C62828; }
+.badge.p2 { background: #FFF3E0; color: #E65100; }
+.badge.p3 { background: #E3F2FD; color: #1565C0; }
+.badge.ok { background: #E8F5E9; color: #2E7D32; }
+
+/* ========== code ========== */
+.code {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 16px 24px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+  margin: 0 0 16px 0;
+  font-family: 'Cascadia Code', 'Fira Code', 'SF Mono', 'Source Code Pro', Consolas, monospace;
+  white-space: pre;
+}
+
+/* ========== card ========== */
+.card-grid { display: flex; gap: 16px; margin: 0 0 16px 0; }
+.card {
+  flex: 1;
+  background: #ffffff;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  border-top: 3px solid #3b82f6;
+}
+.card h3 { font-size: 18px; color: #0f1e33; margin: 0 0 8px 0; font-weight: 700; }
+.card p  { font-size: 14px; color: #5b6b80; margin: 0; line-height: 1.7; }
+
+/* ========== divider ========== */
+.divider { margin: 32px 0; text-align: center; user-select: none; }
+.divider .line { display: inline-block; width: 36px; height: 1px; vertical-align: middle; background: linear-gradient(to right, transparent, #e8f0fe); }
+.divider .line:last-child { background: linear-gradient(to left, transparent, #e8f0fe); }
+.divider .diamond { display: inline-block; width: 8px; height: 8px; margin: 0 12px; vertical-align: middle; transform: rotate(45deg); background: #3b82f6; border-radius: 1px; box-shadow: 0 0 0 2px #f4f7fb; }
+
+/* ========== 来源列表 ========== */
+.source-list { margin: 0 0 16px 0; }
+.source-list ol { padding-left: 20px; font-size: 13px; color: #5b6b80; line-height: 2.0; }
+.source-list ol li { margin-bottom: 6px; }
+.source-list ol li strong { color: #0f1e33; }
+.source-list .src-id { display: inline-block; width: 24px; font-weight: 700; color: #3b82f6; }
+.cite {
+  font-size: 11px;
+  color: #3b82f6;
+  font-weight: 600;
+  vertical-align: super;
+  margin-left: 2px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* ========== 尾页 ========== */
+.end_page {
+  margin-top: 24px;
+  padding: 56px 24px;
+  text-align: center;
+  background: linear-gradient(135deg, #c9d6f3 0%, #e8f0fe 100%);
+  border-radius: 16px;
+}
+.end_page h1 { font-size: 28px; color: #0f1e33; margin: 0 0 16px 0; font-weight: 800; }
+.end_page p  { font-size: 15px; color: #5b6b80; margin: 0; line-height: 1.8; }
+
+/* ========== 响应式 ========== */
+@media screen and (max-width: 600px) {
+  body { padding: 16px !important; }
+  h1 { font-size: 22px !important; }
+  h2 { font-size: 18px !important; }
+  h3 { font-size: 16px !important; }
+  .stat-grid, .card-grid { flex-direction: column; }
+}
+
+/* ========== 打印优化 ========== */
+@media print {
+  body { padding: 0 !important; margin: 0 !important; background: #f4f7fb; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body::before { display: none; }
+  .title, .end_page { border-radius: 0; box-shadow: none; }
+  .doc-section, .card, .stat, .table-wrap { box-shadow: none; border: 1px solid #dbe4ef; }
+  section { break-inside: auto !important; }
+}
+</style>
+</head>
+<body class="mode-doc" data-palette="ink-blue">
+
+  <!-- ===== 封面 ===== -->
+  <section class="title">
+    <h1>mm 子系统 Patch 机会扫描报告</h1>
+    <div class="accent-line"></div>
+    <p>对象：/home/ctyun/Desktop/linux（Linux v7.3-rc4 · aarch64）<br>
+    方法：W=1/W=12 编译 + checkpatch + kernel-doc + 人工审查 + 上游判重<br>
+    结论：8 个可提交候选，全部确认未与 mm-unstable 分支撞车</p>
+  </section>
+
+  <!-- ===== 扫描概览 ===== -->
+  <h1 class="heading">一、扫描概览</h1>
+  <div class="stat-grid">
+    <div class="stat"><div class="num">8</div><div class="label">可提交候选</div></div>
+    <div class="stat"><div class="num">8/8</div><div class="label">未与上游撞车</div></div>
+    <div class="stat"><div class="num">0</div><div class="label">W=1 编译警告</div></div>
+    <div class="stat"><div class="num">7</div><div class="label">已排除假阳性</div></div>
+  </div>
+  <div class="doc-section">
+    <p class="paragraph">本次扫描覆盖 mm/ 全目录（含 damon 子目录）及 include/linux 下 20 余个相关头文件，综合运用四条路线：</p>
+    <ul class="list">
+      <li><strong>编译警告路线</strong>：免 root 装齐 flex/bison 后生成 defconfig，W=1 零警告；W=12 收集到 46 条警告，其中筛出 1 处真死代码，其余多为社区已知的 -Wshadow 噪音；</li>
+      <li><strong>checkpatch 路线</strong>：对 v7.3-rc1 以来全部 27 个 mm 提交跑 <code>--strict</code> 检查，零违例（说明近期提交质量高，该路线无机会）；</li>
+      <li><strong>kernel-doc 路线</strong>：对 mm 核心头文件与 mm/ 内部头文件跑 kernel-doc 检查，发现 4 处格式缺陷；</li>
+      <li><strong>人工审查路线</strong>：系统性排查注释漂移、无效导出、错误处理不对称、引用计数失衡等模式，并对每个候选完成全函数精读与交叉验证。</li>
+    </ul>
+  </div>
+
+  <!-- ===== 候选总览表 ===== -->
+  <div class="table-wrap">
+    <div class="table-caption">候选问题总览（按提交价值排序）</div>
+    <table class="table" data-caption="候选问题总览">
+      <colgroup>
+        <col style="width:7%"><col style="width:33%"><col style="width:36%"><col style="width:13%"><col style="width:11%">
+      </colgroup>
+      <thead>
+        <tr><th>编号</th><th>位置</th><th>问题</th><th>类型</th><th>置信度</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>P1</strong></td><td>mm/page_alloc.c:5464</td><td>EXPORT_SYMBOL(__alloc_frozen_pages_noprof) 为无效导出</td><td>cleanup</td><td>高</td></tr>
+        <tr><td><strong>P2</strong></td><td>include/linux/pgtable.h:660</td><td>clear_young_dirty_ptes() 文档参数名 @mm 应为 @vma</td><td>doc fix</td><td>高</td></tr>
+        <tr><td><strong>P3</strong></td><td>mm/mremap.c:1023</td><td>vrm_stat_account() 注释描述已被删除的 VRM 写入行为</td><td>doc fix</td><td>高</td></tr>
+        <tr><td><strong>P4</strong></td><td>mm/shmem.c:5325</td><td>TMPFS_ATTR_W / TMPFS_ATTR_RW 为全仓库无引用的死宏</td><td>cleanup</td><td>高</td></tr>
+        <tr><td><strong>P5</strong></td><td>mm/page_reporting.h:25</td><td>page_reporting_notify_free() 缺 @order 参数描述</td><td>doc fix</td><td>中</td></tr>
+        <tr><td><strong>P6</strong></td><td>mm/percpu.c:766</td><td>pcpu_block_refresh_hint 缺 short description</td><td>doc fix</td><td>中</td></tr>
+        <tr><td><strong>P7</strong></td><td>mm/memory_hotplug.c:2229</td><td>try_offline_node 缺 short description</td><td>doc fix</td><td>中</td></tr>
+        <tr><td><strong>P8</strong></td><td>include/linux/swapops.h:45</td><td>非 kernel-doc 的位布局注释误以 /** 开头</td><td>doc fix</td><td>中</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout" data-variant="tip">
+    <p><strong>整体判断</strong>：mm 作为内核最核心子系统，经多年高强度 review，静态可发现的功能性 bug（锁/引用计数/错误处理）本轮全部被证伪——现存机会集中在<strong>无效导出清理</strong>、<strong>死代码删除</strong>与<strong>注释漂移修正</strong>三类，均属低风险、易合入的 patch，适合积累社区贡献记录。</p>
+  </div>
+
+  <!-- ===== 高优先级候选 ===== -->
+  <h1 class="heading">二、高优先级候选（P1–P3）</h1>
+
+  <h2 class="heading">P1 · mm/page_alloc.c — 无效 EXPORT_SYMBOL <span class="badge p1">优先提交</span></h2>
+  <div class="doc-section">
+    <p class="paragraph"><strong>位置</strong>：<code>mm/page_alloc.c:5464</code></p>
+    <pre class="code" data-lang="c"><code>struct page *__alloc_frozen_pages_noprof(gfp_t gfp, unsigned int order, ...)
+{
+	...
+	return page;
+}
+EXPORT_SYMBOL(__alloc_frozen_pages_noprof);   /* &lt;-- 待删除 */</code></pre>
+    <p class="paragraph"><strong>为什么是无效导出</strong>（证据链完整，不可辩驳）：</p>
+    <ul class="list">
+      <li>该函数声明仅存在于 <code>mm/page_alloc.h</code>（mm 私有头文件），任何公共头文件均无声明——树外/树内模块无法规范引用；</li>
+      <li>全树使用者仅 4 处，全部在 mm/ 内且全部为内建目标：<code>mm/mempolicy.c</code>（CONFIG_NUMA 为 bool）、<code>mm/slub.c</code>（CONFIG_SLUB 为 <code>def_bool y</code>）、<code>mm/page_alloc.c</code> 自身及宏包装；</li>
+      <li>mm/ 下全部 tristate 目标（ZSMALLOC、HWPOISON_INJECT、DMAPOOL_TEST、KUnit）均不使用该 API；全树（含 rust/、.S、.rst）无任何引用；</li>
+      <li>EXPORT_SYMBOL 的唯一目的是供模块使用，此处永不生效。引入于 <code>49249a2a5eeb</code>（Willy，2024-11），系 __alloc_pages() 重构遗留。</li>
+    </ul>
+    <p class="paragraph"><strong>建议 commit message</strong>：</p>
+    <pre class="code"><code>Subject: mm/page_alloc: drop unneeded EXPORT_SYMBOL for __alloc_frozen_pages_noprof
+
+__alloc_frozen_pages_noprof() is only declared in mm/page_alloc.h, which
+is private to the mm/ built-in code.  All in-tree users
+(mm/page_alloc.c, mm/mempolicy.c and mm/slub.c) are built-in, and no
+module can reference this symbol anyway.  Drop the export.
+
+Fixes: 49249a2a5eeb ("mm: introduce __alloc_frozen_pages()")
+Signed-off-by: &lt;施老师&gt; &lt;邮箱&gt;</code></pre>
+  </div>
+
+  <h2 class="heading">P2 · include/linux/pgtable.h — 文档参数名错误 <span class="badge p1">优先提交</span></h2>
+  <div class="doc-section">
+    <p class="paragraph"><strong>位置</strong>：<code>include/linux/pgtable.h:657-677</code></p>
+    <pre class="code" data-lang="c"><code>/**
+ * clear_young_dirty_ptes - Mark PTEs that map consecutive pages of the
+ *		same folio as old/clean.
+ * @mm: Address space the pages are mapped into.      /* &lt;-- 应为 @vma */
+ ...
+ */
+static inline void clear_young_dirty_ptes(struct vm_area_struct *vma,
+					  unsigned long addr, pte_t *ptep,
+					  unsigned int nr, cydp_t flags)</code></pre>
+    <p class="paragraph">签名第一个参数是 <code>struct vm_area_struct *vma</code>，kernel-doc 却写成 <code>@mm</code>。kernel-doc 工具双重报警：Excess function parameter 'mm' + parameter 'vma' not described。追溯 <code>1b68112c4039</code>（2024-04）——注释从诞生起就写错，两年无人修正。arm64 实现（arch/arm64/include/asm/pgtable.h:1948）使用 vma 参数，与 generic 一致。</p>
+    <p class="paragraph"><strong>修法</strong>：一行替换 <code>@mm: Address space the pages are mapped into.</code> → <code>@vma: the VMA that the folio is mapped into.</code>。建议 Subject：<code>mm: pgtable: fix wrong parameter name in clear_young_dirty_ptes() docs</code>。该文件归 arch/mm 共同维护，get_maintainer 会拉出较长 Cc 列表，属正常。</p>
+  </div>
+
+  <h2 class="heading">P3 · mm/mremap.c — 注释描述已消亡的行为 <span class="badge p1">优先提交</span></h2>
+  <div class="doc-section">
+    <p class="paragraph"><strong>位置</strong>：<code>mm/mremap.c:1022-1026</code></p>
+    <pre class="code" data-lang="c"><code>/*
+ * Update mm exec_vm, stack_vm, data_vm, and locked_vm fields as needed to
+ * account for 'bytes' memory used, and if locked, indicate this in the VRM so
+ * we can handle this correctly later.       /* &lt;-- 描述的行为已不存在 */
+ */
+static void vrm_stat_account(struct vma_remap_struct *vrm,
+			     unsigned long bytes)
+{
+	...
+	vm_stat_account(mm, vma->vm_flags, pages);
+	if (vma_test(vma, VMA_LOCKED_BIT))
+		mm->locked_vm += pages;
+}</code></pre>
+    <p class="paragraph">git 历史直接证实：初始版本（<code>d5c8aec0542e</code>）函数体内确有 <code>vrm-&gt;mlocked = true;</code>，对应注释 "indicate this in the VRM"；<code>2cf442d74216</code>（2025-07，mm/mremap: clean up mlock populate behaviour）把该判断移入 <code>check_prep_vma()</code> 并重命名为 populate_expand，删除了此处赋值，<strong>但注释原样保留</strong>，误导读者以为此函数有副作用。</p>
+    <p class="paragraph"><strong>修法</strong>：删除 "and if locked, indicate this in the VRM so we can handle this correctly later" 一句。建议 Subject：<code>mm/mremap: remove stale comment about VRM mlocked tracking in vrm_stat_account()</code>。</p>
+  </div>
+
+  <!-- ===== W=12 死代码 ===== -->
+  <h1 class="heading">三、W=12 编译警告挖出的死代码（P4）</h1>
+  <div class="doc-section">
+    <p class="paragraph"><strong>位置</strong>：<code>mm/shmem.c:5325-5331</code>（<code>#if defined(CONFIG_SYSFS) &amp;&amp; defined(CONFIG_TMPFS)</code> 块内）</p>
+    <p class="paragraph">W=12 编译报 4 个 unused macro（<code>__INIT_KOBJ_ATTR</code>、<code>TMPFS_ATTR_W</code>、<code>TMPFS_ATTR_RW</code>、<code>TMPFS_ATTR_RO</code>）。逐一定性后：<code>TMPFS_ATTR_RO</code> 被 <code>casefold</code> 属性使用（在 <code>IS_ENABLED(CONFIG_UNICODE)</code> 条件内，arm64 defconfig 未启用 UNICODE 才报警），<code>__INIT_KOBJ_ATTR</code> 是其依赖，均不能动；但 <code>TMPFS_ATTR_W</code> 与 <code>TMPFS_ATTR_RW</code> <strong>经全仓库 grep（.c/.h/.S/.rs）确认零引用</strong>，是真正的死代码，引入自 <code>18d2f10f6284</code>（tmpfs: Fix type for sysfs' casefold attribute）——当时只迁移了 RO 变体，顺手写全了三件套。</p>
+    <p class="paragraph"><strong>修法</strong>：删除 <code>TMPFS_ATTR_W</code> 与 <code>TMPFS_ATTR_RW</code> 两个宏定义（共 8 行）。建议 Subject：<code>shmem: remove unused TMPFS_ATTR_W/RW macros</code>。注意：不要顺手"修复"另两个宏的警告（如挪 ifdef），保持 patch 最小化。</p>
+  </div>
+  <div class="callout" data-variant="warning">
+    <p><strong>W=12 其余警告定性说明</strong>：46 条警告中约 20 条 -Wshadow（如 vmstat.c、rmap.c、truncate.c 的局部变量遮蔽）属社区已知噪音，单独成 patch 不受 maintainer 待见；<code>memblock.c:33</code> INIT_PHYSMEM_REGIONS 在 <code>CONFIG_HAVE_MEMBLOCK_PHYS_MAP</code>（x86）下有使用，属配置差异噪音；<code>secretmem.c:31</code> pr_fmt 未用价值过低，均不建议提交。</p>
+  </div>
+
+  <!-- ===== kernel-doc 系列 ===== -->
+  <h1 class="heading">四、kernel-doc 系列候选（P5–P8）</h1>
+  <div class="doc-section">
+    <p class="paragraph">四个问题均为 kernel-doc 工具机器确认的格式缺陷，建议打成一个 cover letter 系列（或各自独立小 patch），示例 cover subject：<code>[PATCH 0/4] mm: fix kernel-doc issues</code>：</p>
+    <ul class="list">
+      <li><strong>P5 · mm/page_reporting.h:25</strong>：<code>page_reporting_notify_free(unsigned int order)</code> 函数体直接依赖 order（<code>if (order &lt; page_reporting_order)</code>），kernel-doc 却无 <code>@order:</code> 行。补一行 <code>@order: order of the page being freed</code>。</li>
+      <li><strong>P6 · mm/percpu.c:766</strong>：<code>pcpu_block_refresh_hint</code> 注释缺 short description（直接以 <code>* pcpu_block_refresh_hint\n * @chunk:</code> 开始）。改为 <code>pcpu_block_refresh_hint - update hints after a block change</code>。</li>
+      <li><strong>P7 · mm/memory_hotplug.c:2229</strong>：<code>try_offline_node</code> 同样缺 short description。改为 <code>try_offline_node - offline a node if all its sections/CPU are removed</code>。</li>
+      <li><strong>P8 · include/linux/swapops.h:45</strong>：migration swap entry 位布局图表注释误以 <code>/**</code> 开头，导致 kernel-doc 解析器报警（会被误认为可解析注释）。改为 <code>/*</code> 即可。</li>
+    </ul>
+  </div>
+
+  <!-- ===== 判重验证 ===== -->
+  <h1 class="heading">五、上游判重验证</h1>
+  <div class="doc-section">
+    <p class="paragraph">对全部 8 个候选，逐文件对照了 <strong>akpm/mm.git 的 mm-unstable 分支</strong><a class="cite" href="#source-1">[1]</a>（mm 补丁的第一站队列，比 torvalds master 更新）与 <strong>torvalds/linux master</strong><a class="cite" href="#source-2">[2]</a>：</p>
+    <ul class="list">
+      <li>P1 的 EXPORT_SYMBOL、P2 的 @mm、P3 的过时注释、P4 的两个死宏：在 mm-unstable 上<strong>原样存在</strong>，未撞车；</li>
+      <li>P5–P8 的 kernel-doc 缺陷：同样<strong>原样存在</strong>，未撞车；</li>
+      <li>torvalds master 与本地 v7.3-rc4 状态一致（更未修复）。</li>
+    </ul>
+    <p class="paragraph">判重时踩过一个坑供参考：github.com/akpm-mm/mm-unstable 镜像路径返回 404（14 字节响应差点误判为"已撞车"），改用 git.kernel.org 的 plain 接口后下载正常，结论以 kernel.org 数据为准。</p>
+  </div>
+  <div class="callout" data-variant="warning">
+    <p><strong>提交前最后一道保险</strong>：lore.kernel.org 有 Anubis 反爬，本轮无法自动检索邮件列表。建议提交前在 lore 网页手动搜一次候选符号名（如 <code>__alloc_frozen_pages_noprof</code>），确认最近两周无人抢先；也可用 <code>b4 am</code> 拉取 linux-mm 最近存档核对。</p>
+  </div>
+
+  <!-- ===== 假阳性排除 ===== -->
+  <h1 class="heading">六、已排除的假阳性（避免踩坑）</h1>
+  <div class="table-wrap">
+    <div class="table-caption">候选 → 证伪过程（这些看起来像 bug，但实际不是）</div>
+    <table class="table" data-caption="假阳性排除记录">
+      <colgroup>
+        <col style="width:42%"><col style="width:58%">
+      </colgroup>
+      <thead>
+        <tr><th>候选</th><th>排除理由</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>shake_folio、hwpoison_filter_register/unregister 的 EXPORT_SYMBOL_GPL（声明在 mm/internal.h 却导出，树内无外部使用者）</td><td>CONFIG_HWPOISON_INJECT 是 <strong>tristate</strong>；当 =m 而 MEMORY_FAILURE=y 时，hwpoison-inject 模块调用这些符号必须有导出</td></tr>
+        <tr><td>hugetlb_wp() spin_lock(3)/unlock(2) 不平衡</td><td>函数末尾注释 "Caller expects lock to be held"，错误路径带锁返回是该 API 契约</td></tr>
+        <tr><td>filemap.c:3091 等 3 处 max_t(ssize_t, pipe-&gt;max_usage - used, 0) 疑似 unsigned 下溢防护失效</td><td>实际正确：unsigned wrap 值经 (ssize_t) cast 后按补码解释为负数，max(负数, 0)=0 恰好完成 clamp</td></tr>
+        <tr><td>memfd_luo.c retrieve 错误路径引用计数</td><td>kho_restore_folio() 返回 refcount=1 的 folio，三种失败路径的 unlock+put/unlink 组合全部对称</td></tr>
+        <tr><td>migrate_device_coherent_folio() folio_lock 后无 unlock</td><td>锁释放委托给 __migrate_device_finalize()（其中 folio_unlock(src)），跨函数对称</td></tr>
+        <tr><td>MREMAP_DONTUNMAP 的 locked_vm 会计（397432cab17b 刚修过）</td><td>当前实现：源 VMA 清 LOCKED 但遗留旧账恰好代表新 VMA 的锁定，munmap 新 VMA 时回收，数学守恒</td></tr>
+        <tr><td>do_brk_flags 记账不查 vma_supports_mlock</td><td>brk 恒为匿名 VMA，该检查恒真，合理省略（对比 __mmap_complete 需处理文件映射故有检查）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== 提交路径 ===== -->
+  <h1 class="heading">七、提交路径与时机建议</h1>
+  <div class="doc-section">
+    <ul class="list">
+      <li><strong>收件人</strong>：mm 补丁发 <code>linux-mm@vger.kernel.org</code>，Cc <code>akpm@linux-foundation.org</code>；用 <code>./scripts/get_maintainer.pl --no-rolestats your.patch</code> 生成完整 Cc 列表；</li>
+      <li><strong>格式自检</strong>：<code>./scripts/checkpatch.pl --strict your.patch</code> 必须零 ERROR/WARNING（本轮验证近期 mm 提交全过，maintainer 对格式零容忍）；</li>
+      <li><strong>时机</strong>：当前 v7.3-rc4，7.4 合并窗口即将打开——cleanup/doc 类 patch 正是排队好时机（akpm 树全年收，但窗口前后合入最快）；</li>
+      <li><strong>建议提交顺序</strong>：P1（证据链最硬）→ P2（一行修复）→ P3 → P4 → P5-P8 打包一个系列；每个 patch 保持单一目的、最小 diff；</li>
+      <li><strong>Sendmail/客户端</strong>：推荐 <code>git send-email</code>（纯文本、无 HTML、无折叠），需配置 SMTP。</li>
+    </ul>
+  </div>
+
+  <div class="divider"><span class="line"></span><span class="diamond"></span><span class="line"></span></div>
+
+  <!-- ===== 尾页 ===== -->
+  <section class="title end_page">
+    <h1>祝首批 patch 顺利合入</h1>
+    <p>8 个候选 · 3 类问题 · 全部通过 mm-unstable 判重<br>如需直接生成 .patch 文件（git format-patch 格式），随时告诉我</p>
+  </section>
+
+  <!-- ===== 数据来源 ===== -->
+  <h1 class="heading">数据来源</h1>
+  <div class="source-list">
+    <ol class="list">
+      <li id="source-1"><span class="src-id">[1]</span> <strong>akpm/mm.git mm-unstable 分支</strong>，git.kernel.org，判重基准（2026-09-21 拉取）</li>
+      <li id="source-2"><span class="src-id">[2]</span> <strong>torvalds/linux master</strong>，github.com/torvalds/linux，第二判重基准</li>
+    </ol>
+  </div>
+
+</body>
+</html>

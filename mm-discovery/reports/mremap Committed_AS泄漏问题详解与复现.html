@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mremap Committed_AS 泄漏：问题背景详解与复现指南（含完整调用链）</title>
+<style>
+/* ========== Reset & Base ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { min-height: 100%; }
+body {
+  position: relative;
+  font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", "Noto Sans SC", sans-serif;
+  color: #1f2d3d;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 40px 24px;
+  background: linear-gradient(160deg, #f8fafc 0%, #ffffff 45%, #cfe0f5 100%);
+  min-height: 100vh;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 45% 35% at 12% 8%, rgba(255,255,255,0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 88% 90%, rgba(255,255,255,0.45) 0%, transparent 55%);
+}
+body > * { position: relative; z-index: 1; }
+
+/* ========== 封面 Hero ========== */
+.title {
+  position: relative;
+  overflow: hidden;
+  padding: 56px 40px;
+  text-align: center;
+  background: linear-gradient(135deg, #1e3a5f 0%, #3b82f6 50%, #4f8ef7 100%);
+  color: #ffffff;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+}
+.title::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 70% 55% at 18% 82%, rgba(255,255,255,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 82% 18%, rgba(255,255,255,0.08) 0%, transparent 55%);
+  pointer-events: none;
+}
+.title > * { position: relative; z-index: 1; }
+.title h1 { font-size: 28px; font-weight: 800; margin: 0 0 14px 0; letter-spacing: 1px; color: #ffffff; }
+.title .accent-line { width: 48px; height: 3px; background: rgba(255,255,255,0.85); margin: 0 auto 18px; border-radius: 2px; }
+.title p { font-size: 15px; color: rgba(255,255,255,0.85); margin: 0; line-height: 1.7; }
+
+/* ========== 章节标题 ========== */
+h1.heading {
+  font-size: 28px;
+  color: #0f1e33;
+  margin: 36px 0 16px 0;
+  font-weight: 700;
+  border-left: 4px solid #3b82f6;
+  padding-left: 16px;
+}
+h2.heading {
+  font-size: 22px;
+  color: #0f1e33;
+  margin: 28px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #c9d6f3;
+  font-weight: 600;
+}
+h3.heading {
+  font-size: 18px;
+  color: #0f1e33;
+  margin: 20px 0 10px;
+  font-weight: 600;
+}
+
+/* ========== 正文 / 列表 ========== */
+.paragraph { font-size: 15px; color: #1f2d3d; line-height: 1.8; margin: 0 0 16px 0; }
+.list { margin: 0 0 16px 0; padding-left: 24px; font-size: 15px; color: #1f2d3d; line-height: 1.8; }
+.list li { margin-bottom: 8px; }
+.list li::marker { color: #3b82f6; }
+
+/* ========== 正文区卡片化容器 ========== */
+.doc-section {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 24px 28px;
+  margin: 0 0 16px 0;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+}
+.doc-section.alt { background: #e6edf6; box-shadow: none; }
+
+/* ========== callout ========== */
+.callout {
+  margin: 0 0 16px 0;
+  padding: 16px 24px;
+  background: #e8f0fe;
+  border-left: 4px solid #3b82f6;
+  border-radius: 8px;
+}
+.callout[data-variant="warning"] { background: #FFF3E0; border-left-color: #d97706; }
+.callout[data-variant="quote"]   { background: #f0fdfa; border-left-color: #14b8a6; }
+.callout p { font-size: 15px; color: #1f2d3d; margin: 0; line-height: 1.8; }
+
+/* ========== 表格 ========== */
+.table-wrap {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+  overflow: hidden;
+  margin: 0 0 16px 0;
+}
+.table-caption {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #c9d6f3, #e8f0fe);
+  color: #0f1e33;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  border-bottom: 1px solid #dbe4ef;
+}
+table.table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
+table.table thead th {
+  padding: 12px 16px;
+  text-align: left;
+  background: #c9d6f3;
+  color: #0f1e33;
+  font-weight: 700;
+  border-bottom: 2px solid #dbe4ef;
+  word-break: break-word;
+}
+table.table tbody td { padding: 12px 16px; border-bottom: 1px solid #dbe4ef; color: #1f2d3d; word-break: break-word; }
+table.table tbody tr:last-child td { border-bottom: none; }
+table.table tbody tr:hover { background: #e8f0fe; }
+table.table code, .doc-section code, .callout code {
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-size: 13px;
+  background: #eef5ff;
+  color: #0a1626;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* ========== stat ========== */
+.stat-grid { display: flex; gap: 16px; margin: 0 0 16px 0; }
+.stat {
+  flex: 1;
+  text-align: center;
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  border-top: 3px solid #3b82f6;
+}
+.stat .num { font-size: 26px; color: #3b82f6; font-weight: 800; line-height: 1.1; }
+.stat .label { font-size: 12px; color: #5b6b80; margin-top: 6px; }
+
+/* ========== code ========== */
+.code {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 16px 24px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  overflow-x: auto;
+  margin: 0 0 16px 0;
+  font-family: 'Cascadia Code', 'Fira Code', 'SF Mono', 'Source Code Pro', Consolas, monospace;
+  white-space: pre;
+}
+.code .cm { color: #7dd3fc; }
+.code .bad { color: #fca5a5; font-weight: 700; }
+.code .good { color: #86efac; }
+.code .loc { color: #94a3b8; }
+
+/* ========== timeline ========== */
+.timeline { list-style: none; padding: 0; margin: 0 0 16px 0; }
+.timeline li {
+  position: relative;
+  padding-left: 28px;
+  padding-bottom: 18px;
+  border-left: 2px solid #c9d6f3;
+  margin-left: 6px;
+}
+.timeline li:last-child { border-left-color: transparent; padding-bottom: 0; }
+.timeline li::before {
+  content: '';
+  position: absolute;
+  left: -7px; top: 5px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #3b82f6;
+  border: 2px solid #f4f7fb;
+  box-shadow: 0 0 0 2px #e8f0fe;
+}
+.timeline strong { font-size: 14px; color: #2563eb; }
+.timeline p { font-size: 14px; color: #1f2d3d; margin: 4px 0 0 0; line-height: 1.7; }
+.timeline code { font-family: 'Cascadia Code', Consolas, monospace; font-size: 12.5px; background: #eef5ff; color: #0a1626; padding: 1px 5px; border-radius: 4px; }
+
+/* ========== divider ========== */
+.divider { margin: 32px 0; text-align: center; user-select: none; }
+.divider .line { display: inline-block; width: 36px; height: 1px; vertical-align: middle; background: linear-gradient(to right, transparent, #e8f0fe); }
+.divider .line:last-child { background: linear-gradient(to left, transparent, #e8f0fe); }
+.divider .diamond { display: inline-block; width: 8px; height: 8px; margin: 0 12px; vertical-align: middle; transform: rotate(45deg); background: #3b82f6; border-radius: 1px; box-shadow: 0 0 0 2px #f4f7fb; }
+
+/* ========== 尾页 ========== */
+.end_page {
+  margin-top: 24px;
+  padding: 56px 24px;
+  text-align: center;
+  background: linear-gradient(135deg, #c9d6f3 0%, #e8f0fe 100%);
+  border-radius: 16px;
+}
+.end_page h1 { font-size: 28px; color: #0f1e33; margin: 0 0 16px 0; font-weight: 800; }
+.end_page p  { font-size: 15px; color: #5b6b80; margin: 0; line-height: 1.8; }
+
+/* ========== 响应式 ========== */
+@media screen and (max-width: 600px) {
+  body { padding: 16px !important; }
+  h1 { font-size: 22px !important; }
+  h2 { font-size: 18px !important; }
+  h3 { font-size: 16px !important; }
+  .stat-grid { flex-direction: column; }
+}
+
+/* ========== 打印优化 ========== */
+@media print {
+  body { padding: 0 !important; margin: 0 !important; background: #f4f7fb; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body::before { display: none; }
+  .title, .end_page { border-radius: 0; box-shadow: none; }
+  .doc-section, .stat, .table-wrap { box-shadow: none; border: 1px solid #dbe4ef; }
+  section { break-inside: auto !important; }
+}
+</style>
+</head>
+<body class="mode-doc" data-palette="ink-blue">
+
+  <!-- ===== 封面 ===== -->
+  <section class="title">
+    <h1>mremap Committed_AS 泄漏：问题背景详解与复现指南</h1>
+    <div class="accent-line"></div>
+    <p>mm/mremap.c · move_vma() 错误路径记账缺陷 · 潜伏 20 年<br>
+    重构版：每条路径附完整函数调用链与源码位置（v7.3-rc4 实测行号）<br>
+    含可运行 fault injection 复现工程（repro/）</p>
+  </section>
+
+  <!-- ===== 一句话 ===== -->
+  <h1 class="heading">一、问题一句话</h1>
+  <div class="doc-section">
+    <p class="paragraph">私有可写 VMA 做<strong>扩张式 mremap 搬移</strong>时，若页表搬移中途失败（ENOMEM），内核会把数据完整回退到旧 VMA——进程状态恢复原样，但<strong>全局 Committed_AS 从此多记了扩张增量（delta）页，且永远不会被纠正，直到系统重启</strong>。这不是内存泄漏（物理页没丢），而是<strong>记账泄漏</strong>：在 overcommit 策略下，它会让长期运行的服务器越来越早地拒绝合法的内存申请。</p>
+    <div class="stat-grid">
+      <div class="stat"><div class="num">2.6.12</div><div class="label">引入版本（2005 年 git 基线）</div></div>
+      <div class="stat"><div class="num">7.3-rc4</div><div class="label">当前版本仍存在</div></div>
+      <div class="stat"><div class="num">重启</div><div class="label">唯一清除手段</div></div>
+      <div class="stat"><div class="num">未修</div><div class="label">mm-unstable 判重结论</div></div>
+    </div>
+    <p class="paragraph">本文所有调用链均按 <strong>v7.3-rc4（93f51579e7df）源码逐行核实</strong>，行号可直接用于 <code>vim +&lt;行号&gt; &lt;文件&gt;</code> 跳转。涉及文件：<code>mm/mremap.c</code>、<code>mm/vma.c</code>、<code>mm/util.c</code>、<code>mm/memory.c</code>、<code>mm/page_alloc.c</code>、<code>mm/fail_page_alloc.c</code>、<code>security/security.c</code>、<code>security/commoncap.c</code>、<code>include/linux/mman.h</code>、<code>include/linux/mm.h</code>、<code>include/asm-generic/pgalloc.h</code>、<code>lib/fault-inject.c</code>、<code>fs/proc/base.c</code>。</p>
+  </div>
+
+  <!-- ===== 背景 ===== -->
+  <h1 class="heading">二、背景知识：Committed_AS 与它的两条调用链</h1>
+
+  <h2 class="heading">2.1 overcommit 与"承诺记账"</h2>
+  <div class="doc-section">
+    <p class="paragraph">Linux 允许进程申请超过物理内存 + swap 总量的虚拟内存（overcommit），策略由 <code>/proc/sys/vm/overcommit_memory</code> 决定：模式 0（默认，heuristic）、模式 1（always）、模式 2（strict，承诺和不得超过 CommitLimit）。支撑判断的核心计数器是 <strong>Committed_AS</strong>——内核变量 <code>vm_committed_as</code>（<code>mm/util.c:922</code>，percpu_counter 类型），表示"如果所有进程都把申请到的虚拟内存写满，最多需要多少物理内存 + swap"。</p>
+    <div class="callout" data-variant="tip">
+      <p>类比：Committed_AS 是银行批出去的<strong>授信总额</strong>。这个 BUG 的效果是——某笔授信被批准后业务撤销了，授信额度却忘了收回，银行从此以为自己放出去的钱比实际多。</p>
+    </div>
+  </div>
+
+  <h2 class="heading">2.2 记账链（charge）：一笔账怎么加进去</h2>
+  <div class="doc-section">
+    <p class="paragraph">只有私有可写映射（VMA 带 <code>VM_ACCOUNT</code>）记账。<code>mmap</code>/<code>brk</code>/<code>mremap</code> 扩张时走下面这条链——<strong>先加账、再判定，判定不过就自己减回去</strong>：</p>
+    <pre class="code"><code>调用方（mmap/brk/mremap）
+  └─ security_vm_enough_memory_mm()              <span class="loc">security/security.c:735   [LSM 总入口]</span>
+      └─ cap_vm_enough_memory()                  <span class="loc">security/commoncap.c:1453  [LSM 钩子，决定 cap_sys_admin]</span>
+          └─ __vm_enough_memory()                <span class="loc">mm/util.c:959             [真正的策略判定]</span>
+              ├─ vm_acct_memory(pages)           <span class="loc">include/linux/mman.h:76    [先加账！]</span>
+              │    └─ percpu_counter_add_batch(&amp;vm_committed_as, ...)   <span class="loc">vm_committed_as 定义于 mm/util.c:922</span>
+              ├─ 判定 overcommit_memory 三种模式：
+              │    ├─ ALWAYS(1) → return 0（永不拒绝）
+              │    ├─ GUESS(0)  → 粗略检查后 return 0 / goto error
+              │    └─ STRICT(2) → percpu_counter_read_positive(&amp;vm_committed_as) &lt; allowed ?
+              └─ error:（拒绝时）
+                   └─ vm_unacct_memory(pages)   <span class="loc">mm/util.c:999 / include/linux/mman.h:81  [自己减回去]</span>
+                       └─ vm_acct_memory(-pages)</code></pre>
+    <p class="paragraph">注意 <code>vm_acct_memory()</code> 与 <code>vm_unacct_memory()</code> 都是 <code>include/linux/mman.h</code> 里的 inline 函数（76/81 行）——<strong>加账与减账最终都落到同一个 percpu_counter</strong>。任何调用方拿到"允许"返回后，这笔账就<strong>只存在于全局计数器里</strong>，唯一的冲销依据是 VMA 销毁路径。</p>
+  </div>
+
+  <h2 class="heading">2.3 冲账链（uncharge）：账怎么减回来</h2>
+  <div class="doc-section">
+    <p class="paragraph">VMA 销毁时统一走 munmap 通道，冲账数额由 <strong>vms-&gt;nr_accounted</strong> 汇总，而汇总的条件就是 VMA 上的 VM_ACCOUNT 标志——<strong>这正是全案的钥匙</strong>：</p>
+    <pre class="code"><code>munmap / 进程退出 / 内核内部 do_vmi_munmap
+  └─ do_vmi_munmap()                            <span class="loc">mm/vma.c:1710</span>
+      ├─ vms_gather_munmap_area()               <span class="loc">mm/vma.c:1546  ★关键：只有带 VM_ACCOUNT 的 VMA 才累计</span>
+      │    └─ if (vma_test(next, VMA_ACCOUNT_BIT))
+      │           vms-&gt;nr_accounted += nrpages;  <span class="cm">/* 没这个标志的 VMA，页数不计入 */</span>
+      └─ vms_complete_munmap_vmas()             <span class="loc">mm/vma.c:1410</span>
+          ├─ remove_vma(vma)                    <span class="loc">逐个销毁 VMA（mm/vma.c:1441）</span>
+          └─ vm_unacct_memory(vms-&gt;nr_accounted) <span class="loc">mm/vma.c:1443  [实际冲账点]</span>
+
+进程退出（另一入口）：
+  exit_mm() → exit_mmap()                       <span class="loc">mm/mmap.c:1288</span>
+  └─ vm_unacct_memory(nr_accounted)             <span class="loc">mm/mmap.c:1341  [同样按 VMA 的 VM_ACCOUNT 汇总]</span></code></pre>
+    <div class="callout" data-variant="warning">
+      <p><strong>结构性缺陷</strong>：记账动作（2.2 链，写全局计数器）与冲账依据（2.3 链，读 VMA 标志）是<strong>两套独立机制</strong>。只要某个 charge 发生后，对应 VMA 在冲账时刻恰好不带 VM_ACCOUNT，这笔账就变成无人认领的"裸账"。mremap 错误路径恰好制造了这个组合——这就是 BUG 藏身 20 年的结构原因。</p>
+    </div>
+  </div>
+
+  <!-- ===== 流程 ===== -->
+  <h1 class="heading">三、mremap 扩张搬移：完整调用链分步拆解</h1>
+  <div class="doc-section">
+    <p class="paragraph">用户调用 <code>mremap(old_addr, old_len, new_len &gt; old_len, MREMAP_MAYMOVE|MREMAP_FIXED, new_addr)</code>。主链（全在 <code>mm/mremap.c</code>）：</p>
+    <pre class="code"><code>SYSCALL_DEFINE5(mremap, ...)                   <span class="loc">mm/mremap.c:2043  [系统调用入口]</span>
+└─ do_mremap()                                 <span class="loc">mm/mremap.c:1988  [参数校验、vrm 状态机构建]</span>
+    └─ vrm_implies_new_addr(vrm)
+        ? mremap_to(vrm)                       <span class="loc">mm/mremap.c:1458  [指定新地址 → 先 do_munmap 腾地]</span>
+        : mremap_at(vrm)                       <span class="loc">mm/mremap.c:1645  [原地/自动选址]</span>
+    └─ 两者最终都调：
+       move_vma(vrm)                           <span class="loc">mm/mremap.c:1360  [★ 本次 BUG 的主战场]</span></code></pre>
+    <p class="paragraph">下面按 <code>move_vma()</code> 内部时序逐步展开，每步附完整调用链。</p>
+  </div>
+
+  <h2 class="heading">步骤 ①：charge delta — vrm_calc_charge()</h2>
+  <div class="doc-section">
+    <pre class="code"><code>move_vma()                                     <span class="loc">mm/mremap.c:1360</span>
+└─ vrm_calc_charge(vrm)                         <span class="loc">mm/mremap.c:984   [move_vma:1376 处调用]</span>
+    ├─ if (!vma_test(vrm-&gt;vma, VMA_ACCOUNT_BIT)) return true;   <span class="cm">/* 非记账 VMA 直接过 */</span>
+    ├─ charged = vrm-&gt;delta &gt;&gt; PAGE_SHIFT       <span class="cm">/* 扩张增量页数（非 DONTUNMAP）*/</span>
+    ├─ security_vm_enough_memory_mm(mm, charged)                <span class="cm">/* → 2.2 链，vm_committed_as += delta */</span>
+    └─ vrm-&gt;charged = charged                   <span class="cm">/* ★ 暂存，供失败退账用（但只有一个失败分支用了它）*/</span></code></pre>
+    <p class="paragraph">DONTUNMAP 分支差异：charge 的是<strong>全量 new_len</strong> 而非 delta（<code>mm/mremap.c:995-996</code>）——因为源 VMA 不销毁，新旧两份都要占额度。</p>
+  </div>
+
+  <h2 class="heading">步骤 ②：克隆新 VMA — copy_vma_and_data()</h2>
+  <div class="doc-section">
+    <pre class="code"><code>move_vma()
+└─ copy_vma_and_data(vrm, &amp;new_vma)             <span class="loc">mm/mremap.c:1265  [move_vma:1383 处调用]</span>
+    ├─ copy_vma(&amp;vma, new_addr, new_len, ...)   <span class="cm">克隆 VMA 结构（可 merge 则合并），</span>
+    │                                          <span class="cm">★ 复制了 VMA_ACCOUNT_BIT；本身不动账（注释明言）</span>
+    └─ 失败分支：new_vma == NULL 时
+        └─ vrm_uncharge(vrm)                   <span class="loc">mm/mremap.c:1280 → :1013 [★ 干净退账，此路径无 BUG]</span>
+            └─ vm_unacct_memory(vrm-&gt;charged)  <span class="cm">/* delta 如数冲回 */</span></code></pre>
+  </div>
+
+  <h2 class="heading">步骤 ③：搬页表 — move_page_tables()（注入点所在）</h2>
+  <div class="doc-section">
+    <pre class="code"><code>copy_vma_and_data()
+└─ move_page_tables(&amp;pmc)                      <span class="loc">mm/mremap.c:804</span>
+    └─ for 循环逐段搬运（mremap.c:830），dst 侧页表逐级分配，
+       三个失败出口（均 break 出循环 → moved_len &lt; old_len → ENOMEM）：
+
+       出口1  new_pud = alloc_new_pud()          <span class="loc">调用:mremap.c:841  定义:mremap.c:112  break:mremap.c:843</span>
+       └─ p4d_alloc() / pud_alloc()             <span class="loc">include/linux/mm.h（pgtable 分配宏）</span>
+          └─ __pud_alloc → pud_alloc_one → alloc_pages...
+
+       出口2  new_pmd = alloc_new_pmd()          <span class="loc">调用:mremap.c:859  定义:mremap.c:125</span>
+       └─ pmd_alloc()                           <span class="loc">include/linux/mm.h</span>
+          └─ __pmd_alloc → pmd_alloc_one → alloc_pages...
+
+       出口3  pte_alloc(mm, new_pmd)             <span class="loc">调用:mremap.c:879  宏:include/linux/mm.h:3960</span>
+       └─ __pte_alloc()                         <span class="loc">mm/memory.c:451</span>
+          └─ pte_alloc_one()                    <span class="loc">arch/arm64/include/asm/pgalloc.h（含 asm-generic:18）</span>
+             └─ __pte_alloc_one_noprof()        <span class="loc">include/asm-generic/pgalloc.h:99</span>
+                ├─ GFP_PGTABLE_USER             <span class="cm">= GFP_KERNEL|__GFP_ZERO|__GFP_ACCOUNT</span>
+                │                              <span class="cm">  （asm-generic/pgalloc.h:8）★ 含 __GFP_DIRECT_RECLAIM</span>
+                └─ alloc_pages_noprof → __alloc_frozen_pages_noprof()   <span class="loc">mm/page_alloc.c:5383</span>
+                   └─ get_page_from_freelist()  <span class="loc">mm/page_alloc.c:3800</span>
+                      └─ should_fail_alloc_page()  <span class="loc">mm/fail_page_alloc.c:26  ←【fault injection 打点】</span>
+                         └─ should_fail_ex()    <span class="loc">lib/fault-inject.c:124</span></code></pre>
+    <p class="paragraph">三个出口殊途同归：都因 <code>should_fail_alloc_page()</code> 返回 true 而拿不到 order-0 页。这解释了为什么 demo 程序只需注入<strong>任意一次</strong>页分配失败，mremap 就会以"中途失败"形态退出。</p>
+  </div>
+
+  <h2 class="heading">步骤 ④：失败恢复 — 数据回退旧 VMA</h2>
+  <div class="doc-section">
+    <pre class="code"><code>copy_vma_and_data() 内（mm/mremap.c:1292-1312）
+├─ moved_len = move_page_tables(&amp;pmc)           <span class="loc">mremap.c:1292</span>
+├─ if (moved_len &lt; vrm-&gt;old_len) err = -ENOMEM  <span class="loc">mremap.c:1293-1294</span>
+└─ if (unlikely(err)):
+    ├─ PAGETABLE_MOVE(pmc_revert, new_vma, vma, ...)   <span class="cm">/* 反向搬运控制块 */</span>
+    ├─ move_page_tables(&amp;pmc_revert)           <span class="loc">mremap.c:1308  [已搬页表移回旧 VMA（必成功）]</span>
+    └─ 改写 vrm 状态：vrm-&gt;vma = new_vma; old_len = new_len; addr = new_addr
+                                              <span class="cm">/* 下一步改 unmap"新"VMA（数据已回退，它是废弃副本）*/</span></code></pre>
+  </div>
+
+  <h2 class="heading">步骤 ⑤：清标志 + unmap 新 VMA — 泄漏发生地</h2>
+  <div class="doc-section">
+    <pre class="code"><code>move_vma()
+└─ unmap_source_vma(vrm)                        <span class="loc">mm/mremap.c:1160  [move_vma:1407 处调用]</span>
+    ├─ accountable_move = vma_test(vma, VMA_ACCOUNT_BIT)
+    │                    &amp;&amp; !(vrm-&gt;flags &amp; MREMAP_DONTUNMAP)   <span class="loc">mremap.c:1179-1180</span>
+    ├─ if (accountable_move):
+    │    vma_clear_flags(vma, VMA_ACCOUNT_BIT)  <span class="loc">mremap.c:1198  ★★★【泄漏点】</span>
+    │    <span class="cm">/* 本意：unmap 的新 VMA 尺寸是 new_len，若带标志去 unmap 会冲 new_len 的账，
+    │       但旧 VMA（old_len 的账）还活着 → 会把旧账多冲 delta。清标志保护旧账 */</span>
+    └─ do_vmi_munmap(&amp;vmi, mm, addr, len, ...)  <span class="loc">mremap.c:1204</span>
+        └─ （接 2.3 冲账链）
+            ├─ vms_gather_munmap_area()        <span class="loc">mm/vma.c:1546  [VMA_ACCOUNT 已被清 → nr_accounted += 0]</span>
+            └─ vms_complete_munmap_vmas()      <span class="loc">mm/vma.c:1443  [vm_unacct_memory(0) —— 冲 0 页]</span></code></pre>
+    <div class="callout" data-variant="warning">
+      <p><strong>泄漏闭环</strong>：① 步 <code>vrm_calc_charge()</code> 记入的 delta（经由 <code>security_vm_enough_memory_mm()</code> 落进 <code>vm_committed_as</code>）→ ⑤ 步清标志导致 unmap 冲账 0 页 → <code>vrm-&gt;charged</code> 暂存的数值<strong>再无人使用</strong>（整个函数只剩 mremap.c:1280 一处消费它）。对照代码里 v7.1 重构特意造了 charge/uncharge 配对，说明作者知道"失败要退账"，唯独漏了这条路径。</p>
+    </div>
+  </div>
+
+  <!-- ===== 总账推演 ===== -->
+  <h1 class="heading">四、四条路径总账推演（含调用链对照）</h1>
+  <div class="doc-section">
+    <p class="paragraph">设旧 VMA 记账 O 页，扩张量 D 页。对四条路径做守恒检查：</p>
+  </div>
+  <div class="table-wrap">
+    <div class="table-caption">mremap 扩张搬移四路径的 Committed_AS 总账（O = 旧账，D = delta）</div>
+    <table class="table" data-caption="四路径总账对比">
+      <colgroup>
+        <col style="width:15%"><col style="width:33%"><col style="width:28%"><col style="width:12%"><col style="width:12%">
+      </colgroup>
+      <thead>
+        <tr><th>路径</th><th>调用链走向</th><th>关键动作</th><th>结束时账目</th><th>结论</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>正常成功</strong></td>
+          <td>move_vma → copy_vma_and_data → move_page_tables 全程成功 → unmap_source_vma</td>
+          <td>① charge +D（mremap.c:1376）→ 新 VMA 接管 O+D → ⑤ 清标志 unmap 旧 VMA 冲 0，但新 VMA 持有 O+D</td>
+          <td>O + D（新 VMA 实际持有）</td>
+          <td>守恒 ✓</td>
+        </tr>
+        <tr>
+          <td><strong>② copy_vma 失败</strong></td>
+          <td>move_vma → copy_vma_and_data → copy_vma 失败 → <code>vrm_uncharge()</code>（mremap.c:1280）</td>
+          <td>① charge +D → ② 失败 → vm_unacct_memory(D) 冲回</td>
+          <td>O</td>
+          <td>守恒 ✓</td>
+        </tr>
+        <tr>
+          <td><strong>DONTUNMAP 失败</strong></td>
+          <td>move_vma → copy_vma_and_data 失败 → unmap_source_vma（accountable_move=false 不清标志）</td>
+          <td>① charge 全量 new_len → ⑤ 不清 VMA_ACCOUNT → do_vmi_munmap 冲 new_len（mm/vma.c:1443）</td>
+          <td>O</td>
+          <td>守恒 ✓</td>
+        </tr>
+        <tr>
+          <td><strong>③ 中途失败</strong></td>
+          <td>move_vma → copy_vma_and_data → move_page_tables ENOMEM → pmc_revert 回退 → unmap_source_vma 清标志 unmap</td>
+          <td>① charge +D → ④ 数据回退旧 VMA → ⑤ <strong>清标志（mremap.c:1198）→ 冲账 0 页</strong></td>
+          <td><strong>O + D，实际仅 O 在用</strong></td>
+          <td><strong>泄漏 D ✗</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="doc-section">
+    <p class="paragraph">三条对照路径全部守恒的事实说明：这不是"错误路径本来就该有损耗"，而是<strong>唯独中途失败路径漏了退账</strong>。尤其对比②和③——②在同一个 <code>copy_vma_and_data()</code> 函数里正确退账，③只是把失败时机推迟到了搬页表阶段，待遇却截然不同。</p>
+    <div class="callout" data-variant="warning">
+      <p><strong>为什么进程退出也救不回来</strong>：退出冲账走 <code>exit_mmap()</code>（mm/mmap.c:1288）→ <code>vm_unacct_memory(nr_accounted)</code>（mm/mmap.c:1341），依据仍是 VMA 的 VM_ACCOUNT。这笔 D 页的账早已与任何 VMA 脱钩，无人替它冲账。<strong>唯一清除手段是重启</strong>。后果画像：默认 heuristic 模式下，长跑服务器"越用越紧、重启就好"的诡异症状。</p>
+    </div>
+  </div>
+
+  <!-- ===== 根因 ===== -->
+  <h1 class="heading">五、根因与 20 年历史</h1>
+  <div class="doc-section">
+    <p class="paragraph"><code>git log -S 'Conceal VM_ACCOUNT' -- mm/mremap.c</code> 追溯到 <strong>1da177e4c3f4（Linux-2.6.12-rc2，2005 年）</strong>——内核 git 仓库第一个提交，原注释保留至今：</p>
+    <pre class="code" data-lang="c"><code><span class="cm">/* Conceal VM_ACCOUNT so old reservation is not undone */</span>
+if (vm_flags &amp; VM_ACCOUNT &amp;&amp; !(flags &amp; MREMAP_DONTUNMAP))
+	vma_clear_flags(vma, VM_ACCOUNT);</code></pre>
+    <p class="paragraph">2005 年的这行动作（如今位于 <code>unmap_source_vma()</code>，mremap.c:1197-1198）保护的对象至今正确；但没人意识到它同时让 delta 电荷成了孤儿。2025 年 v7.1 的 vrm 重构（<code>b714ccb02a76</code>）引入了 <code>vrm_calc_charge()</code>/<code>vrm_uncharge()</code> 配对（mremap.c:984/:1013）——说明重构者意识到"charge 需要退账"，却只在 copy_vma 失败分支（mremap.c:1280）用了一次。</p>
+    <h3 class="heading">为什么 20 年无人发现</h3>
+    <ul class="list">
+      <li><strong>触发条件苛刻</strong>：私有可写 VMA + 扩张搬移 + 页表分配恰好在搬移窗口内失败，三重低概率叠加；</li>
+      <li><strong>后果是保守方向</strong>：多记账只会更早拒绝内存申请，不崩溃不丢数据，监控上表现为"Committed_AS 缓慢爬升"，极易误读为业务自然增长；</li>
+      <li><strong>重启即愈</strong>：掩盖长周期累积效应；</li>
+      <li><strong>静态工具盲区</strong>：锁/引用计数检查器不覆盖"计数器 ↔ VMA 标志跨对象守恒"，只有人工做总账推演才能看见。</li>
+    </ul>
+  </div>
+
+  <!-- ===== 复现方法论 ===== -->
+  <h1 class="heading">六、复现方法论：fault injection 精确打点</h1>
+  <div class="doc-section">
+    <p class="paragraph">复现难点是让 <code>move_page_tables()</code> <strong>恰好在 mremap 执行窗口内失败</strong>——自然 OOM 不可控（可能失败在 charge 阶段，那条路径不泄漏）。方案：内核自带 fail_page_alloc，打点即 3 步链路图中的 <code>should_fail_alloc_page()</code>（mm/fail_page_alloc.c:26）。</p>
+    <h3 class="heading">6.1 make-it-fail 判定链（为什么只打 demo 进程）</h3>
+    <pre class="code"><code>demo 写 /proc/self/make-it-fail = 1          <span class="loc">fs/proc/base.c:3359  [proc 文件注册]</span>
+└─ current-&gt;make_it_fail = 1                   <span class="cm">/* 任务结构体上的开关 */</span>
+
+mremap 窗口内第一次页分配：
+should_fail_alloc_page()                       <span class="loc">mm/fail_page_alloc.c:26</span>
+└─ should_fail_ex(&amp;fail_page_alloc.attr, ...)  <span class="loc">lib/fault-inject.c:124</span>
+    ├─ if (attr-&gt;task_filter &amp;&amp; !fail_task(attr, current))
+    │    return false                          <span class="cm">/* task_filter=1 时：非 make-it-fail 任务全部放行 */</span>
+    │    fail_task()                            <span class="loc">lib/fault-inject.c:79  [return in_task() &amp;&amp; task-&gt;make_it_fail]</span>
+    ├─ times/space/interval/probability 判定
+    └─ return true → __alloc_frozen_pages_noprof 返回 NULL → 页表分配失败</code></pre>
+    <p class="paragraph">demo 在 mremap 系统调用<strong>前后</strong>开关 make-it-fail（写 1 / 写 0），把失败精确圈定在单次系统调用内。mremap(FIXED) 主路径在 <code>move_page_tables()</code> 之前没有任何页分配（VMA 结构走 slab、charge 是纯计数），所以<strong>窗口内第一次</strong> <code>__alloc_pages</code> 必然是 dst 页表分配——注入命中即产生"中途失败"形态。</p>
+    <h3 class="heading">6.2 两个必踩的默认值坑（源码实证）</h3>
+    <p class="paragraph"><code>mm/fail_page_alloc.c:7-18</code> 的静态初始化，两个默认值会让 naive 配置一枪不中：</p>
+    <pre class="code" data-lang="c"><code>static struct {
+	struct fault_attr attr;
+	bool ignore_gfp_highmem;
+	bool ignore_gfp_reclaim;
+	u32 min_order;
+} fail_page_alloc = {
+	.ignore_gfp_reclaim = true,   <span class="cm">/* 坑1：带 __GFP_DIRECT_RECLAIM 的分配默认不注入 */</span>
+	.ignore_gfp_highmem = true,
+	.min_order = 1,               <span class="cm">/* 坑2：order-0 分配默认不注入！页表恰恰是 order-0 */</span>
+};</code></pre>
+    <ul class="list">
+      <li><strong>坑 1</strong>：页表分配 <code>GFP_PGTABLE_USER</code>（include/asm-generic/pgalloc.h:8）含 <code>__GFP_DIRECT_RECLAIM</code>，默认 <code>ignore_gfp_reclaim=true</code> 直接放行 → 必须 <code>echo 0 &gt; ignore-gfp-wait</code>（debugfs 属性名沿用老名 "wait"）；</li>
+      <li><strong>坑 2</strong>：页表是单页分配（order-0），默认 <code>min_order=1</code> 意味着 order-0 从不注入 → 必须 <code>echo 0 &gt; min-order</code>。</li>
+    </ul>
+    <p class="paragraph">这两个默认值本意是保护内核关键路径，对通用场景合理，但恰好把页表分配挡在门外——这就是很多"配了 fail_page_alloc 却打不中"悬案的答案。</p>
+  </div>
+
+  <!-- ===== demo ===== -->
+  <h1 class="heading">七、复现工程使用指南（repro/）</h1>
+  <div class="doc-section">
+    <h3 class="heading">7.1 文件与内核要求</h3>
+    <ul class="list">
+      <li><code>expand_mremap_leak.c</code> — 复现程序。case 1（默认）：扩张搬移，期望每轮泄漏 delta；case 2（对照）：等长搬移（delta=0），期望零泄漏；</li>
+      <li><code>setup-fi.sh</code> — root 执行一次，配置 fail_page_alloc（含两个坑的显式覆盖）；</li>
+      <li><code>run.sh</code> — 编译 + 跑两个 case + 打印 dmesg 注入证据；</li>
+      <li>内核需 <code>CONFIG_FAULT_INJECTION</code> + <code>CONFIG_FAIL_PAGE_ALLOC</code> + <code>CONFIG_FAULT_INJECTION_DEBUG_FS</code>（检查：<code>zcat /proc/config.gz | grep -E 'FAULT_INJECTION|FAIL_PAGE'</code>）。<strong>请在测试 VM 上运行</strong>。</li>
+    </ul>
+    <h3 class="heading">7.2 每轮流程（程序自动执行）</h3>
+    <pre class="code"><code>读 Committed_AS（before）                    <span class="cm">/* /proc/meminfo */</span>
+mmap 源 VMA（MAP_PRIVATE|PROT_WRITE|MAP_FIXED，64MB）+ madvise NOHUGEPAGE + 逐页写脏
+echo 1 &gt; /proc/self/make-it-fail          <span class="cm">/* 打开注入窗口（fs/proc/base.c:3359）*/</span>
+mremap(old, 64MB, 128MB, MAYMOVE|FIXED, dst)   <span class="cm">/* 页表分配被注入失败 → ENOMEM */</span>
+echo 0 &gt; /proc/self/make-it-fail          <span class="cm">/* 关闭窗口（关键：窗口内只有这一个 syscall）*/</span>
+munmap(old, 64MB)                         <span class="cm">/* 进程回到轮初状态 */</span>
+读 Committed_AS（after）→ round_leak = after - before</code></pre>
+    <h3 class="heading">7.3 预期输出与判读</h3>
+    <pre class="code"><code>case 1: old=64MB new=128MB delta=64MB rounds=10
+round  1: mremap failed with ENOMEM (injected), round delta Committed_AS: +65536 KB (expected 65536)
+...
+--- summary (case 1) ---
+Committed_AS      : 19567852 KB -&gt; 20233852 KB
+net growth        : +655980 KB
+expected leak     : 655360 KB (10 rounds x 65536 KB)
+
+*** LEAK CONFIRMED: Committed_AS permanently grew by the charged delta,
+    while the process holds NO extra VMA. ***</code></pre>
+    <ul class="list">
+      <li><strong>判据逻辑</strong>：程序结束时名下无任何相关 VMA（munmap 干净），Committed_AS 却净增约 N×delta——多出的账无处可归，即泄漏实锤；</li>
+      <li><strong>case 2 对照</strong>：等长搬移 delta=0，同样注入失败，Committed_AS 纹丝不动（<code>*** CONTROL OK ***</code>）——证明泄漏唯一来源是 delta 电荷；</li>
+      <li><strong>dmesg 证据</strong>：每轮一条 <code>FAULT_INJECTION: forcing a failure</code>，verbose 改 2 可 dump_stack，栈应含 <code>__pte_alloc_one_noprof</code> / <code>__alloc_frozen_pages_noprof</code>；</li>
+      <li><strong>噪声处理</strong>：其他进程的 mmap 会引入波动，信噪比不足时加大信号（<code>-d 256</code>）或独占 VM。</li>
+    </ul>
+  </div>
+
+  <!-- ===== 修复 ===== -->
+  <h1 class="heading">八、修复方案</h1>
+  <div class="doc-section">
+    <p class="paragraph">在 <code>move_vma()</code> 错误分支补一次退账（4 行），DONTUNMAP 除外（全量 charge 由 unmap 对称回冲，退了会双重冲账）：</p>
+    <pre class="code" data-lang="c"><code>	err = copy_vma_and_data(vrm, &amp;new_vma);
+	if (err &amp;&amp; !new_vma)
+		return err;
+
++	/*
++	 * The move failed but the new VMA was established, so we will unmap
++	 * the new VMA below with VMA_ACCOUNT_BIT concealed (to protect the
++	 * source VMA's accounting).  This means the delta pages charged in
++	 * vrm_calc_charge() will never be unaccounted: undo the charge now.
++	 *
++	 * MREMAP_DONTUNMAP is excluded: there we charged the full new_len,
++	 * and unmap_source_vma() does not conceal VMA_ACCOUNT_BIT, so the
++	 * unmap of the new VMA reverts the whole charge symmetrically.
++	 */
++	if (err &amp;&amp; !(vrm-&gt;flags &amp; MREMAP_DONTUNMAP))
++		vrm_uncharge(vrm);</code></pre>
+    <p class="paragraph"><code>vrm_uncharge()</code>（mremap.c:1013）内部自带 <code>vma_test(vrm-&gt;vma, VMA_ACCOUNT_BIT)</code> 检查——错误路径已把 <code>vrm-&gt;vma</code> 换成带标志的 new_vma（mremap.c:1310），条件自然成立。提交时 Fixes 标签指向 <code>1da177e4c3f4</code>。</p>
+  </div>
+
+  <!-- ===== 速查表 ===== -->
+  <h1 class="heading">九、源码位置速查表</h1>
+  <div class="table-wrap">
+    <div class="table-caption">本文全部调用链节点（v7.3-rc4 实测行号）</div>
+    <table class="table" data-caption="源码位置速查表">
+      <colgroup>
+        <col style="width:34%"><col style="width:30%"><col style="width:36%">
+      </colgroup>
+      <thead>
+        <tr><th>函数/符号</th><th>位置</th><th>角色</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>SYSCALL_DEFINE5(mremap)</code></td><td>mm/mremap.c:2043</td><td>系统调用入口</td></tr>
+        <tr><td><code>do_mremap()</code></td><td>mm/mremap.c:1988</td><td>参数校验、vrm 构建、分派</td></tr>
+        <tr><td><code>mremap_to()</code> / <code>mremap_at()</code></td><td>mm/mremap.c:1458 / :1645</td><td>指定地址 / 原地两种形态</td></tr>
+        <tr><td><code>move_vma()</code></td><td>mm/mremap.c:1360</td><td>★ 主战场</td></tr>
+        <tr><td><code>vrm_calc_charge()</code></td><td>mm/mremap.c:984</td><td>charge delta（调用点 :1376）</td></tr>
+        <tr><td><code>vrm_uncharge()</code></td><td>mm/mremap.c:1013</td><td>退账（仅 :1280 一处消费）</td></tr>
+        <tr><td><code>copy_vma_and_data()</code></td><td>mm/mremap.c:1265</td><td>克隆 VMA + 搬数据</td></tr>
+        <tr><td><code>move_page_tables()</code></td><td>mm/mremap.c:804</td><td>页表搬移主循环</td></tr>
+        <tr><td><code>alloc_new_pud()</code></td><td>mm/mremap.c:112</td><td>失败出口 1（:842 break）</td></tr>
+        <tr><td><code>alloc_new_pmd()</code></td><td>mm/mremap.c:125</td><td>失败出口 2（:861 break）</td></tr>
+        <tr><td><code>pte_alloc()</code> 宏 → <code>__pte_alloc()</code></td><td>include/linux/mm.h:3960 → mm/memory.c:451</td><td>失败出口 3（mremap.c:879-880 break）</td></tr>
+        <tr><td><code>__pte_alloc_one_noprof()</code></td><td>include/asm-generic/pgalloc.h:99</td><td>页表页分配（GFP_PGTABLE_USER）</td></tr>
+        <tr><td><code>__alloc_frozen_pages_noprof()</code></td><td>mm/page_alloc.c:5383</td><td>页分配核心</td></tr>
+        <tr><td><code>get_page_from_freelist()</code></td><td>mm/page_alloc.c:3800</td><td>分配快路径</td></tr>
+        <tr><td><code>should_fail_alloc_page()</code></td><td>mm/fail_page_alloc.c:26</td><td>← fault injection 打点</td></tr>
+        <tr><td><code>should_fail_ex()</code> / <code>fail_task()</code></td><td>lib/fault-inject.c:124 / :79</td><td>make-it-fail 判定</td></tr>
+        <tr><td><code>unmap_source_vma()</code></td><td>mm/mremap.c:1160</td><td>清标志+unmap（:1198 ★泄漏点）</td></tr>
+        <tr><td><code>do_vmi_munmap()</code></td><td>mm/vma.c:1710</td><td>munmap 通道入口</td></tr>
+        <tr><td><code>vms_gather_munmap_area()</code></td><td>mm/vma.c:1546</td><td>nr_accounted 汇总（按 VM_ACCOUNT）</td></tr>
+        <tr><td><code>vms_complete_munmap_vmas()</code></td><td>mm/vma.c:1410/:1443</td><td>实际冲账点</td></tr>
+        <tr><td><code>security_vm_enough_memory_mm()</code></td><td>security/security.c:735</td><td>LSM 记账总入口</td></tr>
+        <tr><td><code>cap_vm_enough_memory()</code></td><td>security/commoncap.c:1453</td><td>LSM 钩子</td></tr>
+        <tr><td><code>__vm_enough_memory()</code></td><td>mm/util.c:959</td><td>策略判定（先加账后判定）</td></tr>
+        <tr><td><code>vm_committed_as</code> 定义</td><td>mm/util.c:922</td><td>全局 percpu 计数器</td></tr>
+        <tr><td><code>vm_acct_memory()</code> / <code>vm_unacct_memory()</code></td><td>include/linux/mman.h:76/:81</td><td>加账/减账 inline</td></tr>
+        <tr><td><code>exit_mmap()</code></td><td>mm/mmap.c:1288/:1341</td><td>进程退出冲账</td></tr>
+        <tr><td><code>/proc/self/make-it-fail</code></td><td>fs/proc/base.c:3359</td><td>per-task 注入开关</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="divider"><span class="line"></span><span class="diamond"></span><span class="line"></span></div>
+
+  <!-- ===== 尾页 ===== -->
+  <section class="title end_page">
+    <h1>从账本看见 BUG</h1>
+    <p>复现工程：mm-逻辑BUG深度扫描/repro/（README.md 含完整使用说明）<br>配套扫描报告：同目录 mm逻辑BUG深度扫描报告.html<br>patch 草稿与 commit message 见扫描报告第二节</p>
+  </section>
+
+</body>
+</html>

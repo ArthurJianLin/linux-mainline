@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mm 子系统逻辑 BUG 深度扫描报告（Linux 7.3-rc4）</title>
+<style>
+/* ========== Reset & Base ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { min-height: 100%; }
+body {
+  position: relative;
+  font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", "Noto Sans SC", sans-serif;
+  color: #1f2d3d;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 40px 24px;
+  background: linear-gradient(160deg, #f8fafc 0%, #ffffff 45%, #cfe0f5 100%);
+  min-height: 100vh;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 45% 35% at 12% 8%, rgba(255,255,255,0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 88% 90%, rgba(255,255,255,0.45) 0%, transparent 55%);
+}
+body > * { position: relative; z-index: 1; }
+
+/* ========== 封面 Hero ========== */
+.title {
+  position: relative;
+  overflow: hidden;
+  padding: 56px 40px;
+  text-align: center;
+  background: linear-gradient(135deg, #1e3a5f 0%, #3b82f6 50%, #4f8ef7 100%);
+  color: #ffffff;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+}
+.title::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 70% 55% at 18% 82%, rgba(255,255,255,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 82% 18%, rgba(255,255,255,0.08) 0%, transparent 55%);
+  pointer-events: none;
+}
+.title > * { position: relative; z-index: 1; }
+.title h1 { font-size: 28px; font-weight: 800; margin: 0 0 14px 0; letter-spacing: 1px; color: #ffffff; }
+.title .accent-line { width: 48px; height: 3px; background: rgba(255,255,255,0.85); margin: 0 auto 18px; border-radius: 2px; }
+.title p { font-size: 15px; color: rgba(255,255,255,0.85); margin: 0; line-height: 1.7; }
+
+/* ========== 章节标题 ========== */
+h1.heading {
+  font-size: 28px;
+  color: #0f1e33;
+  margin: 36px 0 16px 0;
+  font-weight: 700;
+  border-left: 4px solid #3b82f6;
+  padding-left: 16px;
+}
+h2.heading {
+  font-size: 22px;
+  color: #0f1e33;
+  margin: 28px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #c9d6f3;
+  font-weight: 600;
+}
+h3.heading {
+  font-size: 18px;
+  color: #0f1e33;
+  margin: 20px 0 10px;
+  font-weight: 600;
+}
+
+/* ========== 正文 / 列表 ========== */
+.paragraph { font-size: 15px; color: #1f2d3d; line-height: 1.8; margin: 0 0 16px 0; }
+.list { margin: 0 0 16px 0; padding-left: 24px; font-size: 15px; color: #1f2d3d; line-height: 1.8; }
+.list li { margin-bottom: 8px; }
+.list li::marker { color: #3b82f6; }
+
+/* ========== 正文区卡片化容器 ========== */
+.doc-section {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 24px 28px;
+  margin: 0 0 16px 0;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+}
+.doc-section.alt { background: #e6edf6; box-shadow: none; }
+
+/* ========== callout ========== */
+.callout {
+  margin: 0 0 16px 0;
+  padding: 16px 24px;
+  background: #e8f0fe;
+  border-left: 4px solid #3b82f6;
+  border-radius: 8px;
+}
+.callout[data-variant="warning"] { background: #FFF3E0; border-left-color: #d97706; }
+.callout[data-variant="quote"]   { background: #f0fdfa; border-left-color: #14b8a6; }
+.callout p { font-size: 15px; color: #1f2d3d; margin: 0; line-height: 1.8; }
+
+/* ========== 表格 ========== */
+.table-wrap {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+  overflow: hidden;
+  margin: 0 0 16px 0;
+}
+.table-caption {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #c9d6f3, #e8f0fe);
+  color: #0f1e33;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  border-bottom: 1px solid #dbe4ef;
+}
+table.table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
+table.table thead th {
+  padding: 12px 16px;
+  text-align: left;
+  background: #c9d6f3;
+  color: #0f1e33;
+  font-weight: 700;
+  border-bottom: 2px solid #dbe4ef;
+  word-break: break-word;
+}
+table.table tbody td { padding: 12px 16px; border-bottom: 1px solid #dbe4ef; color: #1f2d3d; word-break: break-word; }
+table.table tbody tr:last-child td { border-bottom: none; }
+table.table tbody tr:hover { background: #e8f0fe; }
+table.table code, .doc-section code, .callout code {
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-size: 13px;
+  background: #eef5ff;
+  color: #0a1626;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* ========== stat ========== */
+.stat-grid { display: flex; gap: 16px; margin: 0 0 16px 0; }
+.stat {
+  flex: 1;
+  text-align: center;
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  border-top: 3px solid #3b82f6;
+}
+.stat .num { font-size: 28px; color: #3b82f6; font-weight: 800; line-height: 1.1; }
+.stat .label { font-size: 12px; color: #5b6b80; margin-top: 6px; }
+
+/* ========== 优先级胶囊 ========== */
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.badge.p1 { background: #FCE4EC; color: #C62828; }
+.badge.p2 { background: #FFF3E0; color: #E65100; }
+.badge.p3 { background: #E3F2FD; color: #1565C0; }
+.badge.ok { background: #E8F5E9; color: #2E7D32; }
+.badge.dead { background: #eceff1; color: #607d8b; }
+
+/* ========== code ========== */
+.code {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 16px 24px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+  margin: 0 0 16px 0;
+  font-family: 'Cascadia Code', 'Fira Code', 'SF Mono', 'Source Code Pro', Consolas, monospace;
+  white-space: pre;
+}
+
+/* ========== card ========== */
+.card-grid { display: flex; gap: 16px; margin: 0 0 16px 0; }
+.card {
+  flex: 1;
+  background: #ffffff;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  border-top: 3px solid #3b82f6;
+}
+.card h3 { font-size: 18px; color: #0f1e33; margin: 0 0 8px 0; font-weight: 700; }
+.card p  { font-size: 14px; color: #5b6b80; margin: 0; line-height: 1.7; }
+
+/* ========== divider ========== */
+.divider { margin: 32px 0; text-align: center; user-select: none; }
+.divider .line { display: inline-block; width: 36px; height: 1px; vertical-align: middle; background: linear-gradient(to right, transparent, #e8f0fe); }
+.divider .line:last-child { background: linear-gradient(to left, transparent, #e8f0fe); }
+.divider .diamond { display: inline-block; width: 8px; height: 8px; margin: 0 12px; vertical-align: middle; transform: rotate(45deg); background: #3b82f6; border-radius: 1px; box-shadow: 0 0 0 2px #f4f7fb; }
+
+/* ========== 来源列表 ========== */
+.source-list { margin: 0 0 16px 0; }
+.source-list ol { padding-left: 20px; font-size: 13px; color: #5b6b80; line-height: 2.0; }
+.source-list ol li { margin-bottom: 6px; }
+.source-list ol li strong { color: #0f1e33; }
+.source-list .src-id { display: inline-block; width: 24px; font-weight: 700; color: #3b82f6; }
+.cite {
+  font-size: 11px;
+  color: #3b82f6;
+  font-weight: 600;
+  vertical-align: super;
+  margin-left: 2px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* ========== 尾页 ========== */
+.end_page {
+  margin-top: 24px;
+  padding: 56px 24px;
+  text-align: center;
+  background: linear-gradient(135deg, #c9d6f3 0%, #e8f0fe 100%);
+  border-radius: 16px;
+}
+.end_page h1 { font-size: 28px; color: #0f1e33; margin: 0 0 16px 0; font-weight: 800; }
+.end_page p  { font-size: 15px; color: #5b6b80; margin: 0; line-height: 1.8; }
+
+/* ========== 响应式 ========== */
+@media screen and (max-width: 600px) {
+  body { padding: 16px !important; }
+  h1 { font-size: 22px !important; }
+  h2 { font-size: 18px !important; }
+  h3 { font-size: 16px !important; }
+  .stat-grid, .card-grid { flex-direction: column; }
+}
+
+/* ========== 打印优化 ========== */
+@media print {
+  body { padding: 0 !important; margin: 0 !important; background: #f4f7fb; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body::before { display: none; }
+  .title, .end_page { border-radius: 0; box-shadow: none; }
+  .doc-section, .card, .stat, .table-wrap { box-shadow: none; border: 1px solid #dbe4ef; }
+  section { break-inside: auto !important; }
+}
+</style>
+</head>
+<body class="mode-doc" data-palette="ink-blue">
+
+  <!-- ===== 封面 ===== -->
+  <section class="title">
+    <h1>mm 子系统逻辑 BUG 深度扫描报告</h1>
+    <div class="accent-line"></div>
+    <p>第二轮：专攻运行时逻辑缺陷（边界条件 / 记账 / 资源不对称）<br>
+    对象：/home/ctyun/Desktop/linux（Linux v7.3-rc4 · aarch64）<br>
+    结论：1 个潜伏 20 年的真实记账 BUG（可提交）· 1 个发现正确但已被上游抢先</p>
+  </section>
+
+  <!-- ===== 扫描概览 ===== -->
+  <h1 class="heading">一、扫描概览</h1>
+  <div class="stat-grid">
+    <div class="stat"><div class="num">1</div><div class="label">可提交逻辑 BUG</div></div>
+    <div class="stat"><div class="num">20 年</div><div class="label">BUG 潜伏年龄</div></div>
+    <div class="stat"><div class="num">538</div><div class="label">本周期 mm 提交盘点</div></div>
+    <div class="stat"><div class="num">10+</div><div class="label">高价值候选被证伪</div></div>
+  </div>
+  <div class="doc-section">
+    <p class="paragraph">第一轮扫出的是 cleanup/doc 类小修小补（见同目录《mm子系统Patch机会扫描报告.html》）。本轮换打法，专攻<strong>影响运行时行为的逻辑缺陷</strong>：</p>
+    <ul class="list">
+      <li><strong>锁定新鲜代码面</strong>：盘点 v7.2 → v7.3-rc4 共 538 个 mm 提交，改动热点为 mremap/vma/userfaultfd/hugetlb/slub/damon；</li>
+      <li><strong>三路并行深挖</strong>：① 新特性 commit 逐个审查逻辑正确性（vrm 状态机、dropbehind、SWAP_USAGE_OFFLIST_BIT、weighted interleave、slub ABA 修复）；② 数值/边界/位运算类（溢出、移位、差一、除零、单位换算）；③ 错误路径资源不对称（charge/uncharge、get/put、list 加删、goto 清理链）；</li>
+      <li><strong>每个候选闭环验证</strong>：git show 读引入提交 → 精读完整函数 → 手算正确值 vs 实际值 → 构造触发场景 → mm-unstable 判重。</li>
+    </ul>
+    <p class="paragraph">三路审查对本周期新代码的结论一致：<strong>-rc4 阶段被 syzbot 与社区评审冲刷后，本周期新引入的逻辑 bug 已随 9 个 fix 提交闭环</strong>（如 SWAP_USAGE_OFFLIST_BIT 位冲突、slub ABA、hugetlb 三连修，均已逐条验证修复完整）。真正的收获在<strong>错误路径与历史遗留区域</strong>。</p>
+  </div>
+
+  <!-- ===== 核心 BUG ===== -->
+  <h1 class="heading">二、核心发现：mremap 扩张搬移错误路径泄漏 Committed_AS <span class="badge p1">可提交</span></h1>
+
+  <h2 class="heading">2.1 缺陷定位 <span class="badge p1">真实逻辑 BUG</span></h2>
+  <div class="doc-section">
+    <p class="paragraph"><strong>位置</strong>：<code>mm/mremap.c</code> — <code>move_vma()</code> 错误恢复路径（当前版本约 1383-1407 行）+ <code>unmap_source_vma()</code>（约 1160-1240 行）</p>
+    <p class="paragraph"><strong>引入</strong>：<code>1da177e4c3f4</code>（Linux-2.6.12-rc2，2005 年 git 基线）——"Conceal VM_ACCOUNT so old reservation is not undone" 模式从内核有 git 史第一天就存在，<strong>潜伏 20 年无人报告</strong>。v7.1 的 vrm 重构（<code>b714ccb02a76</code>）平移了同样逻辑。</p>
+    <pre class="code" data-lang="c"><code>static unsigned long move_vma(struct vma_remap_struct *vrm)
+{
+	...
+	if (!vrm_calc_charge(vrm))          /* ① 对 delta 页 charge */
+		return -ENOMEM;
+	...
+	err = copy_vma_and_data(vrm, &new_vma);  /* ② 建新 VMA + 搬页表 */
+	if (err && !new_vma)
+		return err;                 /* copy_vma 失败 → 已 uncharge ✓ */
+	...
+	if (unlikely(is_dontunmap &amp;&amp; !err))
+		dontunmap_complete(vrm, new_vma);
+	vrm_stat_account(vrm, vrm->new_len);
+	if (!is_dontunmap || err)
+		unmap_source_vma(vrm);        /* ③ 错误路径下 unmap 新 VMA */
+	...
+}</code></pre>
+  </div>
+
+  <h2 class="heading">2.2 总账推演（缺陷证据链）</h2>
+  <div class="doc-section">
+    <p class="paragraph">Committed_AS 的记账模型：<code>security_vm_enough_memory_mm()</code> 对全局计数器 <code>vm_committed_as</code> 加账；这笔账<strong>不挂在任何 VMA 上</strong>，只有显式 <code>vm_unacct_memory()</code> 才能减回。</p>
+    <p class="paragraph"><strong>非 DONTUNMAP 扩张搬移</strong>（new_len &gt; old_len，私有可写 VMA 带 VMA_ACCOUNT_BIT）的错误路径时序：</p>
+    <ol class="list">
+      <li><code>vrm_calc_charge()</code>（mremap.c:984-1007）：对 <code>vrm->delta</code>（new_len − old_len）页 charge → <code>vm_committed_as += delta</code>；</li>
+      <li><code>copy_vma()</code> 成功建立新 VMA（复制了 VMA_ACCOUNT_BIT）；</li>
+      <li><code>move_page_tables()</code> <strong>中途 ENOMEM</strong>（moved_len &lt; old_len）→ err = -ENOMEM；</li>
+      <li>错误恢复：<code>pmc_revert</code> 把已搬页表移回旧 VMA；<code>vrm->vma = new_vma</code>、<code>vrm->old_len = vrm->new_len</code>、<code>vrm->addr = vrm->new_addr</code>——准备 unmap 新 VMA；</li>
+      <li><code>unmap_source_vma()</code>（mremap.c:1179-1202）：<code>accountable_move = vma_test(new_vma, VMA_ACCOUNT_BIT) &amp;&amp; !DONTUNMAP</code> = true → <strong>先清除 new_vma 的 VMA_ACCOUNT_BIT 再 unmap</strong> → unaccount 0 页。</li>
+    </ol>
+    <p class="paragraph"><strong>清位的本意</strong>是保护旧 VMA 的账不被错误冲掉（旧 VMA 的 old_len 账必须保留，因为数据已移回、旧 VMA 完整存活）。但副作用是：</p>
+    <pre class="code"><code>最终总账：
+  Committed_AS = 旧 VMA 的 old_len（正确保留）
+               + delta（① 步 charge，永远无人 uncharge）   &lt;-- 泄漏
+  实际存在     = 旧 VMA 的 old_len                          （数据都在）
+
+  → vm_committed_as 永久多记 delta 页</code></pre>
+    <p class="paragraph"><strong>为什么进程退出也救不回来</strong>：进程退出时按 VMA 的 VMA_ACCOUNT_BIT 清账，但这笔 delta 是裸账（不挂 VMA）——<strong>全局 Committed_AS 膨胀持续到系统重启</strong>。在默认 overcommit heuristic（mode 0）下，长期运行的内存受限系统会逐渐拒绝合法的 mmap/MREMAP。</p>
+  </div>
+
+  <h2 class="heading">2.3 触发场景与边界</h2>
+  <div class="doc-section">
+    <ul class="list">
+      <li><strong>前置条件</strong>：MAP_PRIVATE + PROT_WRITE 的 VMA（带 VM_ACCOUNT）；MREMAP 扩张（delta &gt; 0）；非 DONTUNMAP；</li>
+      <li><strong>触发点</strong>：<code>move_page_tables()</code> 中途分配页表失败（ENOMEM）——需要内存压力；或 <code>vma->vm_ops->mremap()</code> 回调失败（同一 err 块，同泄漏）；</li>
+      <li><strong>对照场景（均已验证不泄漏）</strong>：<code>copy_vma()</code> 失败 → 1280 行已调用 <code>vrm_uncharge()</code> ✓；DONTUNMAP 错误路径 → charged = new_len 全量，且 accountable_move=false 不清标志，unmap 新 VMA 时对称回冲 new_len ✓；正常路径 → delta 由新 VMA 的账目自然承接 ✓；</li>
+      <li><strong>为什么 20 年无人发现</strong>：触发需要"扩张搬移 + 页表分配中途失败"的低概率组合，且后果（Committed_AS 偏高）是<strong>保守方向</strong>的错误——系统只是更早拒绝内存请求，不崩溃、不泄漏真内存，监控上很难归因。</li>
+    </ul>
+  </div>
+
+  <h2 class="heading">2.4 判重与提交建议</h2>
+  <div class="doc-section">
+    <p class="paragraph"><strong>判重</strong>：对照 akpm <strong>mm-unstable</strong><a class="cite" href="#source-1">[1]</a>（下载 58492 字节，已核对防 404 落盘）：错误路径结构与本地完全一致，<code>vrm_uncharge()</code> 调用点仅 copy_vma 失败与 mremap_to 两处，<strong>无人修复，未撞车</strong>。mm-unstable 与本地的 mremap.c 差异均在无关区域（<code>vma_has_anon_rmap</code> 重命名、map_count 检查改进）。</p>
+    <p class="paragraph"><strong>建议修法</strong>（在 <code>move_vma()</code> 的 err 处理中、<code>unmap_source_vma()</code> 之前补一次 uncharge）：</p>
+    <pre class="code" data-lang="c"><code>	err = copy_vma_and_data(vrm, &amp;new_vma);
+	if (err &amp;&amp; !new_vma)
+		return err;
+
++	/*
++	 * The move failed but the new VMA was established, so we will unmap
++	 * the new VMA below with VMA_ACCOUNT_BIT concealed (to protect the
++	 * source VMA's accounting).  This means the delta pages charged in
++	 * vrm_calc_charge() will never be unaccounted: undo the charge now
++	 * to avoid a permanent Committed_AS overcount.
++	 *
++	 * MREMAP_DONTUNMAP is excluded: there we charged the full new_len,
++	 * and unmap_source_vma() does not conceal VMA_ACCOUNT_BIT, so the
++	 * unmap of the new VMA reverts the whole charge symmetrically.
++	 */
++	if (err &amp;&amp; !(vrm->flags &amp; MREMAP_DONTUNMAP))
++		vrm_uncharge(vrm);</code></pre>
+    <p class="paragraph">注意 <code>vrm_uncharge()</code> 内部检查 <code>vma_test(vrm->vma, VMA_ACCOUNT_BIT)</code>——此时 <code>vrm->vma</code> 已在错误路径被换成 new_vma（带该标志），检查自然通过，无需改动函数本身。建议 commit message：</p>
+    <pre class="code"><code>Subject: mm/mremap: fix Committed_AS leak when expanding move fails partway
+
+When an expanding (non-MREMAP_DONTUNMAP) move charges the delta pages in
+vrm_calc_charge() and then move_page_tables() fails partway (or the
+driver's ->mremap callback fails), the error recovery path unmaps the
+newly established VMA with VMA_ACCOUNT_BIT concealed to protect the
+source VMA's accounting.  The concealed flag means the delta charge is
+never unaccounted, so vm_committed_as is permanently overcounted by the
+delta - the charge is not tied to any VMA, so it survives even process
+exit and only a reboot clears it.
+
+Undo the charge on the error path.  MREMAP_DONTUNMAP is excluded: there
+the full new_len charge is reverted symmetrically by unmapping the new
+VMA without concealing VMA_ACCOUNT_BIT.
+
+Fixes: 1da177e4c3f4 ("Initial git repository build")
+Signed-off-by: &lt;施老师&gt; &lt;邮箱&gt;</code></pre>
+  </div>
+
+  <!-- ===== 撞车发现 ===== -->
+  <h1 class="heading">三、发现正确但已被上游抢先：call_mmap_prepare() 文件引用泄漏 <span class="badge dead">已撞车</span></h1>
+  <div class="doc-section">
+    <p class="paragraph"><strong>位置</strong>：<code>mm/vma.c:2770-2796</code>（本地 v7.3-rc4）。<strong>引入</strong>：action 机制 <code>ac0a3fc9c07d</code>（2025-10，v7.2）。</p>
+    <p class="paragraph"><strong>缺陷</strong>：<code>call_mmap_prepare()</code> 中 <code>vfs_mmap_prepare()</code> 成功后，驱动的 mmap_prepare 钩子可能已替换 <code>desc->vm_file</code>（当前唯一 in-tree 实例：/dev/zero MAP_SHARED → <code>shmem_zero_setup_desc()</code>，新建 shmem file 并持有引用）。此后 <code>call_action_prepare()</code> 失败（<code>remap_pfn_range_prepare()</code> 等 4 种 action prepare 均可真实失败）提前 return——此时 <code>map->file_doesnt_need_get</code> 标志尚未设置（2787 行才设置），abort 路径（2911 行 <code>if (map.file_doesnt_need_get) fput(map.file)</code>）不会 fput 替换后的新文件 → <strong>file 引用泄漏</strong>。</p>
+    <p class="paragraph"><strong>可达性</strong>：当前 in-tree 无"替换 vm_file + 可失败 action"的组合（/dev/zero 不指定 action），但 API 契约缺口真实存在，out-of-tree 驱动或未来驱动可触发。</p>
+    <p class="paragraph"><strong>判重结论</strong>：mm-unstable（103431 字节）上该函数已被重构修复——文件替换提前到 action 失败之前，注释明写 <code>/* Update first so file refcount tracked correctly. */</code>，且 <code>file_doesnt_need_get</code> 字段整体删除（还增加了 <code>mmap_prepare_validate()</code> 防御钩子）。<strong>不可再提交，但该发现验证了扫描方法论的有效性</strong>：上游独立发现了同一缺口并走了更大的重构。</p>
+  </div>
+
+  <!-- ===== 三路审查结论 ===== -->
+  <h1 class="heading">四、三路并行审查结论</h1>
+  <div class="doc-section">
+    <h3 class="heading">4.1 新特性逻辑正确性（vrm 状态机 / dropbehind / swap / interleave / slub）</h3>
+    <p class="paragraph">本周期 9 个 fix 提交逐条验证均完整修复；额外构造的 4 个高价值触发场景全部被内核既有不变量证伪（见第五节证伪表 #1-#4）。结论：本周期新代码逻辑已闭环，无新引入可提交 bug。</p>
+    <h3 class="heading">4.2 数值 / 边界 / 位运算</h3>
+    <p class="paragraph">对 v7.2..rc4 全量 diff（10808 新增行）按移位/掩码/乘除/min-max/round-align 六类模式筛出 40+ 命中点，逐一定位读完整函数手算排除。唯一存留边界缺陷为 DAMON <code>probe_hits</code> 的 u8 截断（<code>mm/damon/core.c:1349</code> 防护仅覆盖有权重场景，weight=0 的 probe 在 window_len &gt; 255 时 mod 256 回绕）——但引入提交 <code>93508425db11</code> 的 message 明示作者已认知并接受该限制（"Even if it happens, it only degrades the monitoring results"），且该 commit message 引用的函数名本身有笔误，定性为已知设计限制而非可提交 bug，置信度低。</p>
+    <h3 class="heading">4.3 错误路径资源不对称</h3>
+    <p class="paragraph">对 userfaultfd move/mfill、huge_pmd 迁移、migrate 回滚链、rmap fork、hugetlb dissolve、khugepaged collapse、memcg charge、shmem mfill 计 14 个函数族逐一做资源清单表核对（获取点 → 各错误标签 → 正常路径），全部对称。两个低置信度观察（hugetlb subpool <code>used_hpages</code> 条件覆盖、migrate_vma abort 路径 folio 标志残留）经 2014/2025 年历史追溯与释放路径深挖后均降级为 API 契约/幂等设计，不构成 patch。</p>
+  </div>
+
+  <!-- ===== 证伪表 ===== -->
+  <h1 class="heading">五、高价值候选证伪记录（避免重复踩坑）</h1>
+  <div class="table-wrap">
+    <div class="table-caption">看似逻辑 BUG、实为正确设计的候选（每条都经过完整推理闭环）</div>
+    <table class="table" data-caption="证伪记录">
+      <colgroup>
+        <col style="width:44%"><col style="width:56%">
+      </colgroup>
+      <thead>
+        <tr><th>候选</th><th>证伪依据</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>fork 时 RWP marker 经 <code>pte_modify(pte, dst_vma->vm_page_prot)</code> 归一化可绕过 COW</td><td>MAP_PRIVATE 可写映射的 <code>vm_page_prot</code> 本来就是 PAGE_COPY 只读（<code>__P011</code>），COW 由构造保证</td></tr>
+        <tr><td>mremap 搬移 RWP marker 走 <code>pte_swp_clear_uffd</code> 分支清错位（x86 位重叠）</td><td>x86/arm64/ppc 的 <code>pte_present(protnone)</code> 均返回 true → marker 走 present 分支被正确归一化，不会误读 PFN</td></tr>
+        <tr><td>weighted interleave 全零权重导致除零</td><td>sysfs 拒绝 weight=0；<code>reduce_interleave_weights()</code> 数学下界保证每节点 ≥1</td></tr>
+        <tr><td>folio_pte_batch 批量装 uffd marker 时 uffd 位不齐导致误批</td><td><code>__pte_batch_clear_ignored()</code> 不清 uffd 位 → uffd 位参与 <code>pte_same</code> 比较，混合批次必然断批</td></tr>
+        <tr><td>zsmalloc 三段位编码（PFN|class|obj）在 aarch64 52-bit PA 下溢出</td><td>编码/解码/迁移三处对称，24 ≥ 11+位宽成立，tag 位挂对象内存 handle 无重叠</td></tr>
+        <tr><td>swap bio 手动设 <code>bi_size</code> 但 <code>bio_init</code> 置 <code>bi_vcnt=0</code> 会漏段</td><td><code>bio_for_each_segment</code> 终止条件是 <code>iter.bi_size</code> 而非 bi_vcnt，合法惯用法</td></tr>
+        <tr><td><code>wp_page_copy</code> 的 <code>new_folio = old_folio</code> 变量复用导致 put 数错</td><td>刻意设计：两次 put 对应页表引用+caller 引用各一份，copy 失败只 put 一次（映射未动）</td></tr>
+        <tr><td>shmem mfill 的 acct/unacct 差值回滚疑漏</td><td><code>recalc(0,0)</code> 差值补偿设计：filemap_remove 后 freed=1 → alloced-1 + unacct(1)，精确隐式回滚</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== 提交路径 ===== -->
+  <h1 class="heading">六、提交路径建议</h1>
+  <div class="doc-section">
+    <ul class="list">
+      <li><strong>收件人</strong>：linux-mm@vger.kernel.org，Cc akpm@linux-foundation.org，<code>./scripts/get_maintainer.pl --no-rolestats your.patch</code> 生成完整列表；</li>
+      <li><strong>题材定位</strong>：这是正经的逻辑 fix（错误路径记账泄漏），非 cleanup——Fixes 标签指向 git 基线意味着它理论上可进 stable（虽然 20 年老 bug 无 backport 紧迫性，maintainer 可能仅收主线上）；</li>
+      <li><strong>证据强化</strong>：提交前可写一个复现 demo（进程循环做"扩张 mremap + 注入 ENOMEM 失败"——可用 fault injection：<code>fail_page_alloc</code> 或 debugfs 的 <code>fail_function</code> 定向让 <code>pte_alloc</code> 失败），观察 /proc/meminfo Committed_AS 单调上涨，附在 cover letter 里说服力极强；</li>
+      <li><strong>提交前最后一道保险</strong>：lore 有 Anubis 反爬无法自动检索，建议网页手动搜 "mremap Committed_AS" / "move_vma uncharge" 确认最近无人抢先；</li>
+      <li><strong>时机</strong>：7.4 合并窗口前后正是排队好时机。</li>
+    </ul>
+  </div>
+
+  <div class="divider"><span class="line"></span><span class="diamond"></span><span class="line"></span></div>
+
+  <!-- ===== 尾页 ===== -->
+  <section class="title end_page">
+    <h1>一个 20 年的老账，等一个 patch</h1>
+    <p>本轮交付：1 个可提交逻辑 BUG（含修法与 commit message 草稿）<br>第一轮报告已保留在同目录 · 如需直接生成 .patch 文件或复现 demo，随时告诉我</p>
+  </section>
+
+  <!-- ===== 数据来源 ===== -->
+  <h1 class="heading">数据来源</h1>
+  <div class="source-list">
+    <ol class="list">
+      <li id="source-1"><span class="src-id">[1]</span> <strong>akpm/mm.git mm-unstable 分支</strong>，git.kernel.org（2026-09-21 拉取，mremap.c 58492 字节 / vma.c 103431 字节，均已核对大小防 404 落盘误判）</li>
+    </ol>
+  </div>
+
+</body>
+</html>
