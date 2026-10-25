@@ -923,9 +923,11 @@ static unsigned long __free_reserved_area(phys_addr_t start, phys_addr_t end,
 		if ((unsigned int)poison <= 0xFF)
 			memset(direct_map_addr, poison, PAGE_SIZE);
 
-		free_reserved_page(page);
+		free_reserved_page_norefresh(page);
 		pages++;
 	}
+	if (pages)
+		refresh_zone_lowmem_reserves();
 	return pages;
 }
 

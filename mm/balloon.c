@@ -54,9 +54,14 @@ static void balloon_page_finalize(struct page *page)
 static void balloon_page_enqueue_one(struct balloon_dev_info *b_dev_info,
 				     struct page *page)
 {
+	/*
+	 * Caller holds balloon_pages_lock. Use norefresh so we do not rebuild
+	 * lowmem_reserve[] under the spinlock; the list enqueue/dequeue
+	 * wrappers refresh once after unlock.
+	 */
 	balloon_page_insert(b_dev_info, page);
 	if (b_dev_info->adjust_managed_page_count)
-		adjust_managed_page_count(page, -1);
+		adjust_managed_page_count_norefresh(page, -1);
 	__count_vm_event(BALLOON_INFLATE);
 	inc_node_page_state(page, NR_BALLOON_PAGES);
 }
@@ -78,6 +83,7 @@ size_t balloon_page_list_enqueue(struct balloon_dev_info *b_dev_info,
 	struct page *page, *tmp;
 	unsigned long flags;
 	size_t n_pages = 0;
+	bool need_refresh = false;
 
 	spin_lock_irqsave(&balloon_pages_lock, flags);
 	list_for_each_entry_safe(page, tmp, pages, lru) {
@@ -85,7 +91,12 @@ size_t balloon_page_list_enqueue(struct balloon_dev_info *b_dev_info,
 		balloon_page_enqueue_one(b_dev_info, page);
 		n_pages++;
 	}
+	need_refresh = b_dev_info->adjust_managed_page_count && n_pages;
 	spin_unlock_irqrestore(&balloon_pages_lock, flags);
+
+	if (need_refresh)
+		refresh_zone_lowmem_reserves();
+
 	return n_pages;
 }
 EXPORT_SYMBOL_GPL(balloon_page_list_enqueue);
@@ -114,6 +125,7 @@ size_t balloon_page_list_dequeue(struct balloon_dev_info *b_dev_info,
 	struct page *page, *tmp;
 	unsigned long flags;
 	size_t n_pages = 0;
+	bool need_refresh = false;
 
 	spin_lock_irqsave(&balloon_pages_lock, flags);
 	list_for_each_entry_safe(page, tmp, &b_dev_info->pages, lru) {
@@ -121,14 +133,18 @@ size_t balloon_page_list_dequeue(struct balloon_dev_info *b_dev_info,
 			break;
 		list_del(&page->lru);
 		if (b_dev_info->adjust_managed_page_count)
-			adjust_managed_page_count(page, 1);
+			adjust_managed_page_count_norefresh(page, 1);
 		balloon_page_finalize(page);
 		__count_vm_event(BALLOON_DEFLATE);
 		list_add(&page->lru, pages);
 		dec_node_page_state(page, NR_BALLOON_PAGES);
 		n_pages++;
 	}
+	need_refresh = b_dev_info->adjust_managed_page_count && n_pages;
 	spin_unlock_irqrestore(&balloon_pages_lock, flags);
+
+	if (need_refresh)
+		refresh_zone_lowmem_reserves();
 
 	return n_pages;
 }
@@ -177,6 +193,9 @@ void balloon_page_enqueue(struct balloon_dev_info *b_dev_info,
 	spin_lock_irqsave(&balloon_pages_lock, flags);
 	balloon_page_enqueue_one(b_dev_info, page);
 	spin_unlock_irqrestore(&balloon_pages_lock, flags);
+
+	if (b_dev_info->adjust_managed_page_count)
+		refresh_zone_lowmem_reserves();
 }
 EXPORT_SYMBOL_GPL(balloon_page_enqueue);
 
@@ -306,16 +325,17 @@ static int balloon_page_migrate(struct page *newpage, struct page *page,
 			/*
 			 * When we migrate a page to a different zone we
 			 * have to fixup the count of both involved zones.
+			 * Rare ±1 path: norefresh twice, one refresh after unlock.
 			 */
-			adjust_managed_page_count(page, 1);
-			adjust_managed_page_count(newpage, -1);
+			adjust_managed_page_count_norefresh(page, 1);
+			adjust_managed_page_count_norefresh(newpage, -1);
 		}
 	} else {
 		/* Old page was deflated but new page not inflated. */
 		__count_vm_event(BALLOON_DEFLATE);
 
 		if (b_dev_info->adjust_managed_page_count)
-			adjust_managed_page_count(page, 1);
+			adjust_managed_page_count_norefresh(page, 1);
 	}
 
 	b_dev_info->isolated_pages--;
@@ -323,6 +343,10 @@ static int balloon_page_migrate(struct page *newpage, struct page *page,
 	/* Free the now-deflated page we isolated in balloon_page_isolate(). */
 	balloon_page_finalize(page);
 	spin_unlock_irqrestore(&balloon_pages_lock, flags);
+
+	if (b_dev_info->adjust_managed_page_count &&
+	    (rc || page_zone(page) != page_zone(newpage)))
+		refresh_zone_lowmem_reserves();
 
 	put_page(page);
 
