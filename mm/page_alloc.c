@@ -6402,13 +6402,66 @@ __meminit void zone_pcp_init(struct zone *zone)
 
 static void setup_per_zone_lowmem_reserve(void);
 
-void adjust_managed_page_count(struct page *page, long count)
+/**
+ * adjust_managed_page_count_norefresh - update managed/totalram counters only
+ * @page: page whose zone managed count is adjusted
+ * @count: delta (may be negative)
+ *
+ * Does not recompute zone->lowmem_reserve[]. Callers that adjust many pages
+ * should call refresh_zone_lowmem_reserves() once afterwards, preferably
+ * outside of spinlocks.
+ */
+void adjust_managed_page_count_norefresh(struct page *page, long count)
 {
 	atomic_long_add(count, &page_zone(page)->managed_pages);
 	totalram_pages_add(count);
+}
+EXPORT_SYMBOL(adjust_managed_page_count_norefresh);
+
+/**
+ * refresh_zone_lowmem_reserves - recompute per-zone lowmem reserves
+ *
+ * Wrapper around setup_per_zone_lowmem_reserve() for batched managed-count
+ * updates via adjust_managed_page_count_norefresh().
+ */
+void refresh_zone_lowmem_reserves(void)
+{
 	setup_per_zone_lowmem_reserve();
 }
+EXPORT_SYMBOL(refresh_zone_lowmem_reserves);
+
+void adjust_managed_page_count(struct page *page, long count)
+{
+	adjust_managed_page_count_norefresh(page, count);
+	refresh_zone_lowmem_reserves();
+}
 EXPORT_SYMBOL(adjust_managed_page_count);
+
+/**
+ * free_reserved_pages_norefresh - free reserved pages without reserve rebuild
+ * @page: First page to free.
+ * @order: The page order to free.
+ *
+ * Same as free_reserved_pages() but skips refresh_zone_lowmem_reserves().
+ * Batch callers must refresh once after the loop.
+ */
+void free_reserved_pages_norefresh(struct page *page, unsigned int order)
+{
+	const unsigned long nr_pages = 1UL << order;
+	int i;
+
+	VM_WARN_ON_ONCE(!IS_ALIGNED(page_to_pfn(page), nr_pages));
+	VM_WARN_ON_ONCE(order > MAX_PAGE_ORDER);
+
+	for (i = 0; i < nr_pages; i++) {
+		clear_page_tag_ref(page + i);
+		set_page_count(page + i, 0);
+		ClearPageReserved(page + i);
+	}
+	adjust_managed_page_count_norefresh(page, nr_pages);
+	__free_frozen_pages(page, order, FPI_NONE);
+}
+EXPORT_SYMBOL(free_reserved_pages_norefresh);
 
 /**
  * free_reserved_pages - free reserved pages
@@ -6423,19 +6476,8 @@ EXPORT_SYMBOL(adjust_managed_page_count);
  */
 void free_reserved_pages(struct page *page, unsigned int order)
 {
-	const unsigned long nr_pages = 1UL << order;
-	int i;
-
-	VM_WARN_ON_ONCE(!IS_ALIGNED(page_to_pfn(page), nr_pages));
-	VM_WARN_ON_ONCE(order > MAX_PAGE_ORDER);
-
-	for (i = 0; i < nr_pages; i++) {
-		clear_page_tag_ref(page + i);
-		set_page_count(page + i, 0);
-		ClearPageReserved(page + i);
-	}
-	adjust_managed_page_count(page, nr_pages);
-	__free_frozen_pages(page, order, FPI_NONE);
+	free_reserved_pages_norefresh(page, order);
+	refresh_zone_lowmem_reserves();
 }
 EXPORT_SYMBOL(free_reserved_pages);
 

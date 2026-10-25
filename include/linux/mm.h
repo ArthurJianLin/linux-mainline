@@ -4064,12 +4064,20 @@ extern unsigned long free_reserved_area(void *start, void *end,
 					int poison, const char *s);
 
 extern void adjust_managed_page_count(struct page *page, long count);
+extern void adjust_managed_page_count_norefresh(struct page *page, long count);
+extern void refresh_zone_lowmem_reserves(void);
 
 void free_reserved_pages(struct page *page, unsigned int order);
+void free_reserved_pages_norefresh(struct page *page, unsigned int order);
 
 static inline void free_reserved_page(struct page *page)
 {
 	free_reserved_pages(page, 0);
+}
+
+static inline void free_reserved_page_norefresh(struct page *page)
+{
+	free_reserved_pages_norefresh(page, 0);
 }
 
 static inline void free_reserved_ptdesc(struct ptdesc *pt)

@@ -2130,7 +2130,12 @@ int offline_pages(unsigned long start_pfn, unsigned long nr_pages,
 	zone_pcp_enable(zone);
 
 	/* removal success */
-	adjust_managed_page_count(pfn_to_page(start_pfn), -managed_pages);
+	/*
+	 * norefresh: init_per_zone_wmark_min() already rebuilds
+	 * lowmem_reserve[] via setup_per_zone_lowmem_reserve().
+	 */
+	adjust_managed_page_count_norefresh(pfn_to_page(start_pfn),
+					    -managed_pages);
 	adjust_present_page_count(pfn_to_page(start_pfn), group, -nr_pages);
 
 	/* reinitialise watermarks and update pcp limits */
